@@ -1,221 +1,325 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Workout in Progress — Stride</title>
-  <!-- Google Fonts: Inter & JetBrains Mono -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-  <!-- Stride Design System Stylesheet -->
-  <link rel="stylesheet" href="css/styles.css">
-</head>
-<body>
-
-  <!-- Top Navigation Bar -->
-  <header class="navbar">
-    <div class="navbar-container">
-      <!-- Brand Logo -->
-      <a href="#" class="brand">
-        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-        </svg>
-        <span class="brand-name">STRIDE<span>.</span></span>
-      </a>
-
-      <!-- Screen Switcher Pills -->
-      <nav class="view-switcher" aria-label="Screens">
-        <button type="button" class="view-btn">1. Plan Workout</button>
-        <button type="button" class="view-btn active">2. In Progress</button>
-        <button type="button" class="view-btn">3. Complete</button>
-        <button type="button" class="view-btn">4. History</button>
-      </nav>
-
-      <!-- Nav Actions (Streak Badge & Account) -->
-      <div class="nav-actions">
-        <div class="nav-streak">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12.87 2.5a.75.75 0 0 0-1.28-.53 10.3 10.3 0 0 0-3.3 6.64 6.72 6.72 0 0 0-2.43 1.94A7.47 7.47 0 0 0 4.5 15a7.5 7.5 0 0 0 15 0c0-3.16-1.95-5.91-4.78-7.06a.75.75 0 0 0-.96.95 4.8 4.8 0 0 1 .24 1.51c0 1.25-.6 2.37-1.53 3.08-.24.18-.57.1-.7-.16a7.27 7.27 0 0 0 .1-2.82 8.76 8.76 0 0 0-2-4.5 8.78 8.78 0 0 0-3.7-2.73.75.75 0 0 0-.3.23z"/>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Workout in Progress — Stride</title>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Stride Design System Stylesheet -->
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+      <div class="navbar-container">
+        <!-- Brand Logo -->
+        <a href="#" class="brand">
+          <svg
+            class="brand-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
           </svg>
-          <span class="streak-days-val">5 days</span>
+          <span class="brand-name">STRIDE<span>.</span></span>
+        </a>
+
+        <!-- Screen Switcher Pills -->
+        <nav class="view-switcher" aria-label="Screens">
+          <button type="button" class="view-btn">1. Plan Workout</button>
+          <button type="button" class="view-btn active">2. In Progress</button>
+          <button type="button" class="view-btn">3. Complete</button>
+          <button type="button" class="view-btn">4. History</button>
+        </nav>
+
+        <!-- Nav Actions (Streak Badge & Account) -->
+        <div class="nav-actions">
+          <div class="nav-streak">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M12.87 2.5a.75.75 0 0 0-1.28-.53 10.3 10.3 0 0 0-3.3 6.64 6.72 6.72 0 0 0-2.43 1.94A7.47 7.47 0 0 0 4.5 15a7.5 7.5 0 0 0 15 0c0-3.16-1.95-5.91-4.78-7.06a.75.75 0 0 0-.96.95 4.8 4.8 0 0 1 .24 1.51c0 1.25-.6 2.37-1.53 3.08-.24.18-.57.1-.7-.16a7.27 7.27 0 0 0 .1-2.82 8.76 8.76 0 0 0-2-4.5 8.78 8.78 0 0 0-3.7-2.73.75.75 0 0 0-.3.23z"
+              />
+            </svg>
+            <span class="streak-days-val">5 days</span>
+          </div>
+          <button type="button" class="nav-user-btn" id="btn-open-account">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span>Account</span>
+          </button>
         </div>
-        <button type="button" class="nav-user-btn" id="btn-open-account">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-            <circle cx="12" cy="7" r="4"></circle>
-          </svg>
-          <span>Account</span>
-        </button>
       </div>
-    </div>
-  </header>
+    </header>
 
-  <!-- Main Shell -->
-  <main class="main-wrapper">
-    <!-- ====================================================================
+    <!-- Main Shell -->
+    <main class="main-wrapper">
+      <!-- ====================================================================
          SCREEN 2: Workout In Progress (Figma Screen 2)
          ==================================================================== -->
-    <section class="view-section" id="view-progress">
-      <div class="screen-header">
-        <h1 class="screen-title">Workout in progress</h1>
-        <p class="screen-subtitle">Live GPS tracking. Keep going!</p>
-      </div>
-
-      <div class="two-column-grid">
-        <!-- Left Card: Live GPS Map Display -->
-        <div class="workout-card map-card-container">
-          <div class="card-header u-flex-between">
-            <div>
-              <h2 class="card-title">Live route</h2>
-              <p class="card-subtitle">GPS breadcrumb tracking</p>
-            </div>
-            <div class="gps-badge active">
-              <span class="gps-indicator-dot"></span>
-              <span>GPS Signal: Strong</span>
-            </div>
-          </div>
-          <div class="map-viewport">
-            <div class="map-grid-layer"></div>
-            <!-- Figma Exact Route Path Representation -->
-            <svg class="route-vector-svg" viewBox="0 0 500 350" preserveAspectRatio="none">
-              <!-- Route Path Line -->
-              <path class="route-polyline" d="M 80,180 L 190,180 L 190,95 L 340,95"/>
-              <!-- Origin Dot -->
-              <circle class="route-origin-marker" cx="80" cy="180" r="7"/>
-            </svg>
-            <!-- Pulsing Current Location Marker -->
-            <div class="route-pulse-marker" style="left: 68%; top: 27%;"></div>
-
-            <!-- Floating Controls -->
-            <div class="map-controls-group">
-              <button class="map-control-btn" title="Zoom in">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-              </button>
-              <button class="map-control-btn" title="Zoom out">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-              </button>
-              <button class="map-control-btn" title="Center route">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="3"></circle>
-                  <path d="M3 12h3m12 0h3M12 3v3m0 12v3"></path>
-                </svg>
-              </button>
-            </div>
-          </div>
+      <section class="view-section" id="view-progress">
+        <div class="screen-header">
+          <h1 class="screen-title">Workout in progress</h1>
+          <p class="screen-subtitle">Live GPS tracking. Keep going!</p>
         </div>
 
-        <!-- Right Card: Live Metrics Counters & Controls -->
-        <div class="workout-card">
-          <div class="card-header">
-            <div class="workout-meta-tag">
-              <span class="status-dot"></span>
-              <span>Running · 5.0 km target</span>
-            </div>
-            <h2 class="card-title">Your workout</h2>
-            <p class="card-subtitle">Real-time telemetry and target progress</p>
-          </div>
-
-          <div class="card-body">
-            <div class="stats-container">
-              <!-- Distance Metric -->
-              <div class="stat-item">
-                <span class="stat-label">Distance</span>
-                <span class="stat-value highlight" id="live-distance-val">3.4 km</span>
+        <div class="two-column-grid">
+          <!-- Left Card: Live GPS Map Display -->
+          <div class="workout-card map-card-container">
+            <div class="card-header u-flex-between">
+              <div>
+                <h2 class="card-title">Live route</h2>
+                <p class="card-subtitle">GPS breadcrumb tracking</p>
               </div>
-
-              <!-- Time Metric -->
-              <div class="stat-item">
-                <span class="stat-label">Time</span>
-                <span class="stat-value" id="live-time-val">22:15</span>
-              </div>
-
-              <!-- Progress Bar -->
-              <div class="progress-container">
-                <div class="progress-header">
-                  <span>Target completion</span>
-                  <span class="u-text-brand">68%</span>
-                </div>
-                <div class="progress-track">
-                  <div class="progress-bar" style="width: 68%;"></div>
-                </div>
+              <div class="gps-badge active">
+                <span class="gps-indicator-dot"></span>
+                <span>GPS Signal: Strong</span>
               </div>
             </div>
-
-            <!-- Action Controls -->
-            <div class="u-flex u-gap-3 u-mt-4">
-              <button type="button" id="btn-end-workout" class="btn btn-primary btn-block">
-                <span>End workout</span>
-              </button>
-            </div>
-            <p class="form-hint u-text-center u-mt-2">You will be alerted immediately when reaching 5.0 km</p>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Create Account Modal -->
-  <div class="modal-overlay" id="modal-account" role="dialog" aria-modal="true">
-    <div class="modal-dialog">
-      <div class="modal-header">
-        <div class="modal-title-group">
-          <h3 class="modal-title">Create Account</h3>
-          <p class="modal-subtitle">Save workout to LocalStorage & increase streak</p>
-        </div>
-        <button type="button" class="modal-close-btn" aria-label="Close">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-      <form id="form-create-account">
-        <div class="modal-body">
-          <div class="feature-box">
-            <div class="feature-box-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            <div class="map-viewport">
+              <div class="map-grid-layer"></div>
+              <!-- Figma Exact Route Path Representation -->
+              <svg
+                class="route-vector-svg"
+                viewBox="0 0 500 350"
+                preserveAspectRatio="none"
+              >
+                <!-- Route Path Line -->
+                <path
+                  class="route-polyline"
+                  d="M 80,180 L 190,180 L 190,95 L 340,95"
+                />
+                <!-- Origin Dot -->
+                <circle class="route-origin-marker" cx="80" cy="180" r="7" />
               </svg>
+              <!-- Pulsing Current Location Marker -->
+              <div class="route-pulse-marker" style="left: 68%; top: 27%"></div>
+
+              <!-- Floating Controls -->
+              <div class="map-controls-group">
+                <button class="map-control-btn" title="Zoom in">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+                <button class="map-control-btn" title="Zoom out">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+                <button class="map-control-btn" title="Center route">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M3 12h3m12 0h3M12 3v3m0 12v3"></path>
+                  </svg>
+                </button>
+              </div>
             </div>
-            <div class="feature-box-text">
-              <strong>Offline-First & Local:</strong> Your workouts and streak are stored privately on this device via browser LocalStorage.
+          </div>
+
+          <!-- Right Card: Live Metrics Counters & Controls -->
+          <div class="workout-card">
+            <div class="card-header">
+              <div class="workout-meta-tag">
+                <span class="status-dot"></span>
+                <span>Running · 5.0 km target</span>
+              </div>
+              <h2 class="card-title">Your workout</h2>
+              <p class="card-subtitle">
+                Real-time telemetry and target progress
+              </p>
             </div>
-          </div>
 
-          <div class="form-group">
-            <label class="form-label" for="input-username">Athlete Name / Handle</label>
-            <input type="text" id="input-username" class="form-input" placeholder="e.g. Alex Runner">
-          </div>
+            <div class="card-body">
+              <div class="stats-container">
+                <!-- Distance Metric -->
+                <div class="stat-item">
+                  <span class="stat-label">Distance</span>
+                  <span class="stat-value highlight" id="live-distance-val"
+                    >3.4 km</span
+                  >
+                </div>
 
-          <div class="form-group">
-            <label class="form-label" for="input-email">Email Address</label>
-            <input type="email" id="input-email" class="form-input" placeholder="alex@stride.app">
-          </div>
+                <!-- Time Metric -->
+                <div class="stat-item">
+                  <span class="stat-label">Time</span>
+                  <span class="stat-value" id="live-time-val">22:15</span>
+                </div>
 
-          <div class="form-group">
-            <label class="form-label" for="input-password">Password</label>
-            <input type="password" id="input-password" class="form-input" placeholder="••••••••••••">
+                <!-- Progress Bar -->
+                <div class="progress-container">
+                  <div class="progress-header">
+                    <span>Target completion</span>
+                    <span class="u-text-brand">68%</span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-bar" style="width: 68%"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Action Controls -->
+              <div class="u-flex u-gap-3 u-mt-4">
+                <button
+                  type="button"
+                  id="btn-end-workout"
+                  class="btn btn-primary btn-block"
+                >
+                  <span>End workout</span>
+                </button>
+              </div>
+              <p class="form-hint u-text-center u-mt-2">
+                You will be alerted immediately when reaching 5.0 km
+              </p>
+            </div>
           </div>
         </div>
+      </section>
+    </main>
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-primary btn-block">
-            <span>Create Account & Save Workout</span>
-          </button>
-          <button type="button" class="btn btn-outline btn-block">
-            <span>Cancel</span>
+    <!-- Create Account Modal -->
+    <div
+      class="modal-overlay"
+      id="modal-account"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <h3 class="modal-title">Create Account</h3>
+            <p class="modal-subtitle">
+              Save workout to LocalStorage & increase streak
+            </p>
+          </div>
+          <button type="button" class="modal-close-btn" aria-label="Close">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
           </button>
         </div>
-      </form>
+        <form id="form-create-account">
+          <div class="modal-body">
+            <div class="feature-box">
+              <div class="feature-box-icon">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <rect
+                    x="3"
+                    y="11"
+                    width="18"
+                    height="11"
+                    rx="2"
+                    ry="2"
+                  ></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </div>
+              <div class="feature-box-text">
+                <strong>Offline-First & Local:</strong> Your workouts and streak
+                are stored privately on this device via browser LocalStorage.
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="input-username"
+                >Athlete Name / Handle</label
+              >
+              <input
+                type="text"
+                id="input-username"
+                class="form-input"
+                placeholder="e.g. Alex Runner"
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="input-email">Email Address</label>
+              <input
+                type="email"
+                id="input-email"
+                class="form-input"
+                placeholder="alex@stride.app"
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="input-password">Password</label>
+              <input
+                type="password"
+                id="input-password"
+                class="form-input"
+                placeholder="••••••••••••"
+              />
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary btn-block">
+              <span>Create Account & Save Workout</span>
+            </button>
+            <button type="button" class="btn btn-outline btn-block">
+              <span>Cancel</span>
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
-
-</body>
+  </body>
 </html>
