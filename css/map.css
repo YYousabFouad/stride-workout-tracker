@@ -1,0 +1,161 @@
+/**
+ * Stride Workout Tracker — Map & Route Visualization Styles
+ * GPS Route Rendering, Dark Map Tiles, Pulse Markers, and HUD Overlays
+ */
+
+.map-card-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 480px;
+}
+
+.map-viewport {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 380px;
+  background-color: #0b1317;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+}
+
+/* Subtle Dark Grid Background Pattern matching Figma */
+.map-grid-layer {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(to right, rgba(30, 41, 51, 0.4) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(30, 41, 51, 0.4) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+/* Leaflet Container Styling Overrides for Dark Mode */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background-color: #0b1317 !important;
+  font-family: var(--font-family-sans) !important;
+}
+
+/* CartoDB / OSM Dark Tile adjustments */
+.leaflet-tile {
+  filter: brightness(0.85) contrast(1.15) hue-rotate(180deg) invert(1);
+}
+
+/* Map HUD Overlays */
+.map-hud-top {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.gps-badge {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background-color: rgba(14, 21, 26, 0.88);
+  border: 1px solid var(--color-border-subtle);
+  backdrop-filter: blur(8px);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.gps-badge.active .gps-indicator-dot {
+  background-color: var(--color-brand-primary);
+  box-shadow: 0 0 10px var(--color-brand-primary);
+  animation: liveDot 1.2s infinite;
+}
+
+.gps-indicator-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--color-text-muted);
+}
+
+/* Map Floating Controls */
+.map-controls-group {
+  position: absolute;
+  bottom: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  z-index: 10;
+}
+
+.map-control-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background-color: rgba(20, 26, 31, 0.9);
+  border: 1px solid var(--color-border-subtle);
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(8px);
+  transition: all var(--transition-fast);
+}
+
+.map-control-btn:hover {
+  background-color: var(--color-bg-card-hover);
+  border-color: var(--color-border-medium);
+  color: var(--color-brand-primary);
+}
+
+/* Route SVG Mockup Display (Figma Exact Vector Representation) */
+.route-vector-svg {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+}
+
+.route-polyline {
+  stroke: var(--color-brand-primary);
+  stroke-width: 4px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  filter: drop-shadow(0 0 8px var(--color-brand-primary));
+}
+
+.route-origin-marker {
+  fill: var(--color-brand-primary);
+  filter: drop-shadow(0 0 6px var(--color-brand-primary));
+}
+
+.route-pulse-marker {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background-color: var(--color-brand-primary);
+  border: 3px solid #060d0c;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 14px var(--color-brand-primary);
+}
+
+.route-pulse-marker::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 2px solid var(--color-brand-primary);
+  animation: pulseGlow 1.8s infinite;
+}
