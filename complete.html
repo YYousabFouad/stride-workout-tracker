@@ -19,7 +19,7 @@
     <header class="navbar">
       <div class="navbar-container">
         <!-- Brand Logo -->
-        <a href="#" class="brand">
+        <a href="index.html" class="brand">
           <svg
             class="brand-icon"
             viewBox="0 0 24 24"
@@ -36,10 +36,10 @@
 
         <!-- Screen Switcher Pills -->
         <nav class="view-switcher" aria-label="Screens">
-          <button type="button" class="view-btn">1. Plan Workout</button>
-          <button type="button" class="view-btn">2. In Progress</button>
-          <button type="button" class="view-btn active">3. Complete</button>
-          <button type="button" class="view-btn">4. History</button>
+          <a href="index.html" class="view-btn">1. Plan Workout</a>
+          <a href="progress.html" class="view-btn">2. In Progress</a>
+          <a href="complete.html" class="view-btn active">3. Complete</a>
+          <a href="history.html" class="view-btn">4. History</a>
         </nav>
 
         <!-- Nav Actions (Streak Badge & Account) -->
@@ -97,11 +97,11 @@
             <div class="stat-grid-duo u-mb-4">
               <div class="stat-item">
                 <span class="stat-label">Total Distance</span>
-                <span class="stat-value highlight">5.0 km</span>
+                <span class="stat-value highlight" id="complete-distance-val">5.0 km</span>
               </div>
               <div class="stat-item">
                 <span class="stat-label">Total Time</span>
-                <span class="stat-value">32:14</span>
+                <span class="stat-value" id="complete-time-val">32:14</span>
               </div>
             </div>
 
@@ -323,6 +323,6 @@
         </form>
       </div>
     </div>
-    <script src="/js/main.js" defer></script>
+    <script type="module" src="js/main.js"></script>
   </body>
 </html>

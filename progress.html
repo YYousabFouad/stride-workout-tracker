@@ -19,7 +19,7 @@
     <header class="navbar">
       <div class="navbar-container">
         <!-- Brand Logo -->
-        <a href="#" class="brand">
+        <a href="index.html" class="brand">
           <svg
             class="brand-icon"
             viewBox="0 0 24 24"
@@ -36,10 +36,10 @@
 
         <!-- Screen Switcher Pills -->
         <nav class="view-switcher" aria-label="Screens">
-          <button type="button" class="view-btn">1. Plan Workout</button>
-          <button type="button" class="view-btn active">2. In Progress</button>
-          <button type="button" class="view-btn">3. Complete</button>
-          <button type="button" class="view-btn">4. History</button>
+          <a href="index.html" class="view-btn">1. Plan Workout</a>
+          <a href="progress.html" class="view-btn active">2. In Progress</a>
+          <a href="complete.html" class="view-btn">3. Complete</a>
+          <a href="history.html" class="view-btn">4. History</a>
         </nav>
 
         <!-- Nav Actions (Streak Badge & Account) -->
@@ -117,7 +117,7 @@
 
               <!-- Floating Controls -->
               <div class="map-controls-group">
-                <button class="map-control-btn" title="Zoom in">
+                <button class="map-control-btn" title="Zoom in" aria-label="Zoom in">
                   <svg
                     width="16"
                     height="16"
@@ -130,7 +130,7 @@
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                   </svg>
                 </button>
-                <button class="map-control-btn" title="Zoom out">
+                <button class="map-control-btn" title="Zoom out" aria-label="Zoom out">
                   <svg
                     width="16"
                     height="16"
@@ -142,7 +142,7 @@
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                   </svg>
                 </button>
-                <button class="map-control-btn" title="Center route">
+                <button class="map-control-btn" title="Center route" aria-label="Center route">
                   <svg
                     width="16"
                     height="16"
@@ -164,7 +164,7 @@
             <div class="card-header">
               <div class="workout-meta-tag">
                 <span class="status-dot"></span>
-                <span>Running · 5.0 km target</span>
+                <span id="live-meta-tag">Running · 5.0 km target</span>
               </div>
               <h2 class="card-title">Your workout</h2>
               <p class="card-subtitle">
@@ -178,24 +178,24 @@
                 <div class="stat-item">
                   <span class="stat-label">Distance</span>
                   <span class="stat-value highlight" id="live-distance-val"
-                    >3.4 km</span
+                    >0.0 km</span
                   >
                 </div>
 
                 <!-- Time Metric -->
                 <div class="stat-item">
                   <span class="stat-label">Time</span>
-                  <span class="stat-value" id="live-time-val">22:15</span>
+                  <span class="stat-value" id="live-time-val">00:00</span>
                 </div>
 
                 <!-- Progress Bar -->
                 <div class="progress-container">
                   <div class="progress-header">
                     <span>Target completion</span>
-                    <span class="u-text-brand">68%</span>
+                    <span class="u-text-brand" id="live-progress-percent">0%</span>
                   </div>
                   <div class="progress-track">
-                    <div class="progress-bar" style="width: 68%"></div>
+                    <div class="progress-bar" id="live-progress-bar" style="width: 0%"></div>
                   </div>
                 </div>
               </div>
@@ -210,7 +210,7 @@
                   <span>End workout</span>
                 </button>
               </div>
-              <p class="form-hint u-text-center u-mt-2">
+              <p class="form-hint u-text-center u-mt-2" id="live-target-hint">
                 You will be alerted immediately when reaching 5.0 km
               </p>
             </div>
@@ -321,6 +321,6 @@
         </form>
       </div>
     </div>
-    <script src="/js/main.js" defer></script>
+    <script type="module" src="js/main.js"></script>
   </body>
 </html>

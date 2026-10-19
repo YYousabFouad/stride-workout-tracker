@@ -1,0 +1,47 @@
+/**
+ * Stride Workout Tracker — History Screen (history.html)
+ * Loads saved workouts from localStorage and dynamically renders historical entries.
+ */
+
+import { STORAGE_KEYS, getStorageItem } from "./storage.js";
+
+export const initHistoryScreen = function () {
+  const viewHistory = document.getElementById("view-history");
+  if (!viewHistory) return;
+
+  const historyContainer = document.querySelector(".history-list");
+  const storedHistory = getStorageItem(STORAGE_KEYS.HISTORY);
+
+  if (historyContainer && Array.isArray(storedHistory) && storedHistory.length > 0) {
+    storedHistory.forEach((item) => {
+      const isRide = item.sport === "ride";
+      const iconPath = isRide
+        ? '<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-3 11.5L9 9l3-3 3 4.5 3.5-1"/>'
+        : '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>';
+
+      const itemHtml = `
+        <div class="history-item">
+          <div class="history-sport-info">
+            <div class="sport-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${iconPath}</svg>
+            </div>
+            <div>
+              <div class="history-title">${item.title}</div>
+              <div class="history-date">${item.date}</div>
+            </div>
+          </div>
+          <div class="history-metrics">
+            <div>
+              <div class="history-metric-val">${item.distance}</div>
+              <div class="history-metric-unit">Distance</div>
+            </div>
+            <div>
+              <div class="history-metric-val">${item.duration}</div>
+              <div class="history-metric-unit">Duration</div>
+            </div>
+          </div>
+        </div>`;
+      historyContainer.insertAdjacentHTML("afterbegin", itemHtml);
+    });
+  }
+};
