@@ -83,7 +83,10 @@ export const initProgressScreen = function () {
       if (mapViewport) mapViewport.style.display = "none";
       if (vizTitle) vizTitle.textContent = "3D Live Runner";
       if (vizSubtitle) vizSubtitle.textContent = "Biomechanical pacing & speed telemetry";
-      if (runner3dInstance) runner3dInstance.start();
+      if (runner3dInstance) {
+        runner3dInstance.start();
+        runner3dInstance.resize();
+      }
     });
 
     btnModeMap.addEventListener("click", () => {

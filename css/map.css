@@ -165,12 +165,13 @@
    ========================================================================== */
 @media (max-width: 768px) {
   .map-card-container {
-    min-height: 250px;
-    height: 250px;
+    min-height: unset;
+    height: auto;
   }
 
   .map-viewport {
-    min-height: 250px;
+    min-height: 330px;
+    height: 330px;
   }
 
   .map-controls-group {

@@ -19,12 +19,12 @@ export class Runner3D {
     this.cadence = 165; // Steps per minute
     this.speed = 11.2; // km/h
     this.timeScale = 1.0;
-    this.cameraMode = "perspective"; // 'perspective' | 'side' | 'follow'
+    this.cameraMode = "follow"; // Default: companion chase view from his back
+    this.orbitRotation = { x: 0.12, y: Math.PI };
 
     // Interactive mouse / touch orbit drag
     this.isDragging = false;
     this.prevMousePos = { x: 0, y: 0 };
-    this.orbitRotation = { x: 0.15, y: -0.45 };
 
     this.init();
   }
@@ -32,14 +32,21 @@ export class Runner3D {
   init() {
     const width = this.container.clientWidth || 400;
     const height = this.container.clientHeight || 320;
+    this.isMobile = width < 600 || (window.innerWidth && window.innerWidth < 600);
 
     // 1. Scene & Atmospheric Fog
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.FogExp2(0x060d0c, 0.035);
 
-    // 2. Camera
-    this.camera = new THREE.PerspectiveCamera(46, width / height, 0.1, 100);
-    this.applyCameraPreset("perspective", false);
+    // 2. Camera with responsive mobile framing (wider FOV on phones to fit runner)
+    const initialFov = this.isMobile ? 54 : 46;
+    this.camera = new THREE.PerspectiveCamera(
+      initialFov,
+      width / height,
+      0.1,
+      100
+    );
+    this.applyCameraPreset("follow", false);
 
     // 3. WebGL Renderer
     this.renderer = new THREE.WebGLRenderer({
@@ -79,6 +86,9 @@ export class Runner3D {
 
     // 10. Mouse / Touch Orbit Controls
     this.setupInteraction();
+
+    // 11. Battery & Thermal Optimization (Pause when off-screen on mobile)
+    this.setupVisibilityObserver();
 
     // Auto-start rendering loop
     this.start();
@@ -191,8 +201,9 @@ export class Runner3D {
     // Dynamic Vanta WAVES-inspired mesh terrain surrounding the track
     const width = 42;
     const depth = 70;
-    const segmentsX = 42;
-    const segmentsY = 42;
+    // Mobile adaptive grid density (24x24 on phones for 60 FPS, 42x42 on desktop)
+    const segmentsX = this.isMobile ? 24 : 42;
+    const segmentsY = this.isMobile ? 24 : 42;
 
     const waveGeo = new THREE.PlaneGeometry(width, depth, segmentsX, segmentsY);
     waveGeo.rotateX(-Math.PI / 2);
@@ -217,7 +228,8 @@ export class Runner3D {
   }
 
   setupSpeedParticles() {
-    this.particleCount = 280;
+    // Mobile adaptive particle budget (140 on phones, 280 on desktop)
+    this.particleCount = this.isMobile ? 140 : 280;
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(this.particleCount * 3);
     const velocities = new Float32Array(this.particleCount);
@@ -436,19 +448,46 @@ export class Runner3D {
     return hipGroup;
   }
 
+  resize() {
+    if (!this.container || !this.renderer || !this.camera) return;
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
+    if (width > 0 && height > 0) {
+      this.isMobile = width < 600 || (window.innerWidth && window.innerWidth < 600);
+      this.camera.aspect = width / height;
+      // Dynamically adjust FOV on mobile so runner stays comfortably framed
+      this.camera.fov = this.isMobile ? 54 : 46;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(width, height);
+    }
+  }
+
   setupResizeObserver() {
-    this.resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const width = entry.contentRect.width;
-        const height = entry.contentRect.height;
-        if (width > 0 && height > 0) {
-          this.camera.aspect = width / height;
-          this.camera.updateProjectionMatrix();
-          this.renderer.setSize(width, height);
-        }
-      }
+    this.resizeObserver = new ResizeObserver(() => {
+      this.resize();
     });
     this.resizeObserver.observe(this.container);
+  }
+
+  setupVisibilityObserver() {
+    if (!("IntersectionObserver" in window)) return;
+    this.visibilityObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            if (!this.isRunning && !this.manuallyPaused) {
+              this.start();
+            }
+          } else {
+            if (this.isRunning) {
+              this.pause();
+            }
+          }
+        }
+      },
+      { threshold: 0.1 }
+    );
+    this.visibilityObserver.observe(this.container);
   }
 
   setupInteraction() {
@@ -476,30 +515,53 @@ export class Runner3D {
 
     const onPointerUp = () => {
       this.isDragging = false;
+      this.isTouchHorizontal = false;
     };
 
     el.addEventListener("mousedown", (e) => onPointerDown(e.clientX, e.clientY));
     window.addEventListener("mousemove", (e) => onPointerMove(e.clientX, e.clientY));
     window.addEventListener("mouseup", onPointerUp);
 
+    let touchStartX = 0;
+    let touchStartY = 0;
+    this.isTouchHorizontal = false;
+
     el.addEventListener(
       "touchstart",
       (e) => {
         if (e.touches.length === 1) {
-          onPointerDown(e.touches[0].clientX, e.touches[0].clientY);
+          touchStartX = e.touches[0].clientX;
+          touchStartY = e.touches[0].clientY;
+          this.isTouchHorizontal = false;
+          onPointerDown(touchStartX, touchStartY);
         }
       },
       { passive: true }
     );
+
     window.addEventListener(
       "touchmove",
       (e) => {
         if (this.isDragging && e.touches.length === 1) {
-          onPointerMove(e.touches[0].clientX, e.touches[0].clientY);
+          const curX = e.touches[0].clientX;
+          const curY = e.touches[0].clientY;
+          const dx = Math.abs(curX - touchStartX);
+          const dy = Math.abs(curY - touchStartY);
+
+          // Allow native vertical page scroll when swipe is predominantly vertical;
+          // only engage 3D orbit when swipe is distinctly horizontal.
+          if (!this.isTouchHorizontal && dx > 8 && dx > dy * 1.25) {
+            this.isTouchHorizontal = true;
+          }
+
+          if (this.isTouchHorizontal) {
+            onPointerMove(curX, curY);
+          }
         }
       },
       { passive: true }
     );
+
     window.addEventListener("touchend", onPointerUp);
   }
 
@@ -524,13 +586,13 @@ export class Runner3D {
     if (mode === "side") {
       target = { x: 5.2, y: 1.35, z: 0.1 };
       lookTarget = { x: 0, y: 1.25, z: 0 };
-    } else if (mode === "follow") {
-      target = { x: 0, y: 2.1, z: -4.5 };
-      lookTarget = { x: 0, y: 1.25, z: 2.0 };
-    } else {
-      // Perspective / Hero
+    } else if (mode === "perspective") {
       target = { x: 3.8, y: 1.8, z: 4.8 };
       lookTarget = { x: 0, y: 1.25, z: 0 };
+    } else {
+      // Follow / Chase Companion (Behind the runner looking forward)
+      target = { x: 0, y: 2.05, z: -4.2 };
+      lookTarget = { x: 0, y: 1.35, z: 2.5 };
     }
 
     if (animated && window.anime) {
@@ -654,10 +716,11 @@ export class Runner3D {
       this.neonPointLight.intensity = 2.6 + Math.sin(cycle * 2) * 0.8;
     }
 
-    // 7. Dynamic Camera Follow
+    // 7. Dynamic Camera Follow (Running companion perspective)
     if (this.cameraMode === "follow") {
-      this.camera.position.x = Math.sin(cycle) * 0.12;
-      this.camera.position.y = 2.05 + bounce * 0.5;
+      this.camera.position.x = Math.sin(cycle) * 0.08;
+      this.camera.position.y = 2.05 + bounce * 0.35;
+      this.camera.position.z = -4.2;
     }
 
     // 8. Vanta Wave Field Dynamic Undulation
@@ -699,6 +762,8 @@ export class Runner3D {
 
     if (this.cameraMode === "custom" || this.isDragging) {
       this.updateCameraOrbit();
+    } else if (this.cameraMode === "follow") {
+      this.camera.lookAt(0, 1.35, 2.5);
     } else {
       this.camera.lookAt(0, 1.25, 0);
     }
@@ -708,6 +773,7 @@ export class Runner3D {
   }
 
   start() {
+    this.resize();
     if (this.isRunning) return;
     this.isRunning = true;
     this.clock.start();
@@ -726,6 +792,9 @@ export class Runner3D {
     this.pause();
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
+    }
+    if (this.visibilityObserver) {
+      this.visibilityObserver.disconnect();
     }
     if (this.vantaWaveMesh) {
       this.vantaWaveMesh.geometry.dispose();

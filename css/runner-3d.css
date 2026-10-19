@@ -65,7 +65,7 @@
   overflow: hidden;
   border: 1px solid var(--color-border-subtle);
   cursor: grab;
-  touch-action: none;
+  touch-action: pan-y;
   user-select: none;
 }
 
@@ -199,18 +199,19 @@
    ========================================================================== */
 @media (max-width: 768px) {
   .runner-3d-viewport {
-    min-height: 270px;
-    height: 270px;
+    min-height: 330px;
+    height: 330px;
+    width: 100%;
   }
 
   .runner-hud-top {
-    top: var(--space-2);
-    left: var(--space-2);
-    right: var(--space-2);
+    top: var(--space-3);
+    left: var(--space-3);
+    right: var(--space-3);
   }
 
   .runner-hud-pill {
-    padding: 4px 10px;
+    padding: 5px 12px;
     font-size: 11px;
     gap: 6px;
   }
@@ -220,19 +221,62 @@
   }
 
   .runner-hud-bottom {
-    bottom: var(--space-2);
-    left: var(--space-2);
-    right: var(--space-2);
+    bottom: var(--space-3);
+    left: var(--space-3);
+    right: var(--space-3);
     justify-content: center;
   }
 
   .cam-preset-btn {
-    padding: 4px 8px;
-    font-size: 10px;
+    padding: 6px 12px;
+    font-size: 11px;
+    min-height: 34px; /* Touch-friendly tap target */
   }
 
   .viz-toggle-btn {
-    padding: 5px 10px;
+    padding: 6px 12px;
+    font-size: 12px;
+    min-height: 36px; /* Touch-friendly tap target */
+  }
+}
+
+/* Small Smartphone Viewports (iPhone, Pixel, Galaxy <= 600px) */
+@media (max-width: 600px) {
+  .map-card-container .card-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+
+  .visualizer-toggle-group {
+    width: 100%;
+    display: flex;
+  }
+
+  .viz-toggle-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 10px;
+    font-size: 12px;
+    min-height: 40px;
+  }
+
+  .runner-camera-controls {
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+  }
+
+  .cam-preset-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 7px 10px;
     font-size: 11px;
+    min-height: 36px;
+  }
+
+  .runner-3d-viewport {
+    min-height: 330px;
+    height: 330px;
   }
 }
