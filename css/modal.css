@@ -206,3 +206,40 @@
     transform: translateY(0);
   }
 }
+
+/* ==========================================================================
+   Mobile Phone Bottom-Sheet Modal Adaptation (max-width: 480px)
+   ========================================================================== */
+@media (max-width: 480px) {
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal-dialog {
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    max-width: 100%;
+    margin: 0;
+    transform: translateY(100%);
+    border-bottom: none;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  .modal-overlay.active .modal-dialog,
+  .modal-overlay:target .modal-dialog {
+    transform: translateY(0);
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding-left: var(--space-5);
+    padding-right: var(--space-5);
+  }
+
+  .modal-footer {
+    padding-bottom: max(var(--space-6), env(safe-area-inset-bottom, var(--space-6)));
+  }
+}
+

@@ -465,3 +465,89 @@
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
+
+/* ==========================================================================
+   Mobile Phone Component Adjustments (max-width: 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .btn {
+    min-height: 48px;
+    font-size: var(--font-size-base);
+  }
+
+  .btn:active {
+    transform: scale(0.98);
+  }
+
+  .segmented-btn {
+    min-height: 44px;
+    font-size: var(--font-size-sm);
+  }
+
+  .stat-grid-duo {
+    gap: var(--space-3);
+  }
+
+  .stat-item {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .stat-value {
+    font-size: 32px;
+  }
+
+  .streak-card-content {
+    min-height: auto;
+    padding: var(--space-2) 0;
+  }
+
+  .streak-number-display {
+    font-size: 44px;
+    margin-bottom: var(--space-2);
+  }
+
+  .streak-description {
+    font-size: var(--font-size-sm);
+  }
+
+  .history-item {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .history-metrics {
+    gap: var(--space-4);
+  }
+
+  .history-metric-val {
+    font-size: var(--font-size-base);
+  }
+}
+
+@media (max-width: 480px) {
+  .stat-value {
+    font-size: 28px;
+  }
+
+  .history-sport-info {
+    gap: var(--space-3);
+  }
+
+  .sport-icon-badge {
+    width: 36px;
+    height: 36px;
+  }
+
+  .sport-icon-badge svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .history-title {
+    font-size: var(--font-size-sm);
+  }
+
+  .history-date {
+    font-size: 11px;
+  }
+}
+

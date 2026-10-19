@@ -159,3 +159,34 @@
   border: 2px solid var(--color-brand-primary);
   animation: pulseGlow 1.8s infinite;
 }
+
+/* ==========================================================================
+   Mobile Phone Map Viewport Adjustments (max-width: 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .map-card-container {
+    min-height: 250px;
+    height: 250px;
+  }
+
+  .map-viewport {
+    min-height: 250px;
+  }
+
+  .map-controls-group {
+    bottom: var(--space-3);
+    right: var(--space-3);
+    gap: var(--space-1);
+  }
+
+  .map-control-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .gps-badge {
+    padding: 2px 8px;
+    font-size: 11px;
+  }
+}
+

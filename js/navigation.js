@@ -19,7 +19,7 @@ export const initNavigation = function () {
   ];
 
   document.addEventListener("click", function (e) {
-    const navBtn = e.target.closest(".view-btn");
+    const navBtn = e.target.closest(".view-btn, .mobile-nav-item");
     if (!navBtn) return;
 
     // Check href attribute first if it's an anchor tag

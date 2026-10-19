@@ -184,18 +184,160 @@
   margin: 0 auto;
 }
 
-/* Responsive Grid Adaptation */
-@media (max-width: 900px) {
-  .two-column-grid {
-    grid-template-columns: 1fr;
-    gap: var(--space-6);
-  }
+/* ==========================================================================
+   Mobile Bottom Navigation Bar (Phone Screens)
+   ========================================================================== */
+.mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(60px + env(safe-area-inset-bottom, 0px));
+  background: rgba(6, 13, 12, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--color-border-subtle);
+  z-index: 99;
+  padding: 6px var(--space-4) max(6px, env(safe-area-inset-bottom, 6px));
+  justify-content: space-around;
+  align-items: center;
+}
 
-  .screen-title {
-    font-size: var(--font-size-2xl);
+.mobile-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  transition: all var(--transition-fast);
+  padding: 4px var(--space-2);
+  border-radius: var(--radius-md);
+  min-width: 56px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-nav-item svg {
+  width: 20px;
+  height: 20px;
+  transition: transform var(--transition-fast), color var(--transition-fast);
+}
+
+.mobile-nav-item:hover,
+.mobile-nav-item:active {
+  color: var(--color-text-primary);
+}
+
+.mobile-nav-item.active {
+  color: var(--color-brand-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.mobile-nav-item.active svg {
+  transform: scale(1.1);
+  filter: drop-shadow(0 0 6px var(--color-brand-glow));
+}
+
+/* ==========================================================================
+   Responsive Adaptations for Phone Screens (max-width: 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .navbar-container {
+    padding: 0 var(--space-4);
   }
 
   .view-switcher {
-    display: none; /* Mobile navigation uses bottom or dropdown */
+    display: none !important;
+  }
+
+  .mobile-bottom-nav {
+    display: flex;
+  }
+
+  .main-wrapper {
+    padding: var(--space-4) var(--space-4) calc(var(--space-16) + 40px);
+  }
+
+  .screen-header {
+    margin-bottom: var(--space-4);
+  }
+
+  .screen-title {
+    font-size: 24px;
+    letter-spacing: -0.02em;
+  }
+
+  .screen-subtitle {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .two-column-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+
+  /* Plan Screen: Put workout form on top on mobile phones */
+  #view-plan .two-column-grid > .workout-card:first-child {
+    order: 2;
+  }
+  #view-plan .two-column-grid > .workout-card:last-child {
+    order: 1;
+  }
+
+  /* Progress Screen: Map on top, stats below */
+  #view-progress .two-column-grid > .workout-card:first-child {
+    order: 1;
+  }
+  #view-progress .two-column-grid > .workout-card:last-child {
+    order: 2;
+  }
+
+  /* Complete Screen: Summary on top, streak below */
+  #view-complete .two-column-grid > .workout-card:first-child {
+    order: 1;
+  }
+  #view-complete .two-column-grid > .workout-card:last-child {
+    order: 2;
   }
 }
+
+/* Extra small phones (<= 480px) */
+@media (max-width: 480px) {
+  .brand-name {
+    font-size: var(--font-size-lg);
+  }
+
+  .brand-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .nav-streak {
+    padding: 3px 8px;
+    font-size: 12px;
+  }
+
+  .nav-user-btn {
+    padding: var(--space-1) var(--space-2);
+    font-size: 12px;
+  }
+
+  .workout-card {
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+  }
+
+  .card-header {
+    margin-bottom: var(--space-4);
+  }
+
+  .card-title {
+    font-size: var(--font-size-lg);
+  }
+}
+
