@@ -13,6 +13,8 @@
     />
     <!-- Stride Design System Stylesheet -->
     <link rel="stylesheet" href="css/styles.css" />
+    <!-- Anime.js for smooth camera animations -->
+    <script src="js/vendor/anime.min.js"></script>
   </head>
   <body>
     <!-- Top Navigation Bar -->
@@ -84,19 +86,54 @@
         </div>
 
         <div class="two-column-grid">
-          <!-- Left Card: Live GPS Map Display -->
+          <!-- Left Card: Live Visualizer (3D Runner & GPS Route) -->
           <div class="workout-card map-card-container">
             <div class="card-header u-flex-between">
               <div>
-                <h2 class="card-title">Live route</h2>
-                <p class="card-subtitle">GPS breadcrumb tracking</p>
+                <h2 class="card-title" id="visualizer-card-title">3D Live Runner</h2>
+                <p class="card-subtitle" id="visualizer-card-subtitle">Biomechanical pacing & speed telemetry</p>
               </div>
-              <div class="gps-badge active">
-                <span class="gps-indicator-dot"></span>
-                <span>GPS Signal: Strong</span>
+              <div class="visualizer-toggle-group" role="tablist" aria-label="Visualizer Mode">
+                <button type="button" class="viz-toggle-btn active" id="btn-mode-3d" role="tab" aria-selected="true" title="Switch to 3D Runner">
+                  <span class="viz-icon">🏃</span> 3D Runner
+                </button>
+                <button type="button" class="viz-toggle-btn" id="btn-mode-map" role="tab" aria-selected="false" title="Switch to GPS Route Map">
+                  <span class="viz-icon">🗺️</span> GPS Route
+                </button>
               </div>
             </div>
-            <div class="map-viewport">
+
+            <!-- 3D Cyberpunk Runner Viewport -->
+            <div id="runner-3d-viewport" class="runner-3d-viewport" role="region" aria-label="3D Interactive Runner">
+              <!-- Top HUD Overlay -->
+              <div class="runner-hud-top">
+                <div class="runner-hud-pill">
+                  <span class="runner-hud-dot"></span>
+                  <span id="runner-hud-cadence">165 SPM</span>
+                  <span style="opacity: 0.4">|</span>
+                  <span id="runner-hud-speed">11.2 km/h</span>
+                </div>
+                <div class="runner-drag-hint">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 8v8m-4-4h8"></path>
+                  </svg>
+                  <span>Drag to Orbit</span>
+                </div>
+              </div>
+
+              <!-- Bottom Camera Preset Controls -->
+              <div class="runner-hud-bottom">
+                <div class="runner-camera-controls" role="group" aria-label="Camera Presets">
+                  <button type="button" class="cam-preset-btn active" data-cam="perspective" title="Perspective Angle">Perspective</button>
+                  <button type="button" class="cam-preset-btn" data-cam="side" title="Side Profile">Side</button>
+                  <button type="button" class="cam-preset-btn" data-cam="follow" title="Follow Runner">Follow</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- GPS Route Map Viewport -->
+            <div id="map-viewport" class="map-viewport" style="display: none;" role="region" aria-label="GPS Route Map">
               <div class="map-grid-layer"></div>
               <!-- Figma Exact Route Path Representation -->
               <svg

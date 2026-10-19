@@ -1,0 +1,238 @@
+/**
+ * Stride Workout Tracker — 3D Cyberpunk Runner Styles
+ * Controls, HUD overlays, Camera presets, and responsive viewports for Three.js runner
+ */
+
+/* ==========================================================================
+   Visualizer Mode Toggle Switcher
+   ========================================================================== */
+.visualizer-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  background-color: rgba(14, 21, 26, 0.85);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  padding: 3px;
+  gap: 2px;
+  backdrop-filter: blur(8px);
+}
+
+.viz-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.viz-toggle-btn:hover {
+  color: var(--color-text-primary);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.viz-toggle-btn.active {
+  background-color: rgba(0, 240, 181, 0.15);
+  border-color: rgba(0, 240, 181, 0.4);
+  color: var(--color-brand-primary);
+  box-shadow: 0 0 12px rgba(0, 240, 181, 0.2);
+  font-weight: var(--font-weight-semibold);
+}
+
+.viz-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* ==========================================================================
+   3D Runner Viewport
+   ========================================================================== */
+.runner-3d-viewport {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 380px;
+  background: radial-gradient(circle at 50% 35%, #0d2522 0%, #060d0c 85%);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.runner-3d-viewport:active {
+  cursor: grabbing;
+}
+
+.runner-3d-viewport canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  outline: none;
+}
+
+/* ==========================================================================
+   HUD Overlays & Telemetry Badges
+   ========================================================================== */
+.runner-hud-top {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+  pointer-events: none;
+  gap: var(--space-2);
+}
+
+.runner-hud-pill {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: rgba(10, 18, 16, 0.88);
+  border: 1px solid rgba(0, 240, 181, 0.3);
+  backdrop-filter: blur(10px);
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family-mono);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 12px rgba(0, 240, 181, 0.15);
+}
+
+.runner-hud-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--color-brand-primary);
+  box-shadow: 0 0 8px var(--color-brand-primary);
+  animation: liveDot 1.4s infinite;
+}
+
+.runner-drag-hint {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: rgba(14, 21, 26, 0.75);
+  border: 1px solid var(--color-border-subtle);
+  backdrop-filter: blur(8px);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  transition: opacity var(--transition-fast);
+}
+
+.runner-hud-bottom {
+  position: absolute;
+  bottom: var(--space-4);
+  left: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Camera Preset Controls
+   ========================================================================== */
+.runner-camera-controls {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  background-color: rgba(14, 21, 26, 0.9);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  padding: 3px;
+  gap: 2px;
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-card);
+}
+
+.cam-preset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 11px;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-sans);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cam-preset-btn:hover {
+  color: var(--color-text-primary);
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.cam-preset-btn.active {
+  background-color: rgba(0, 217, 245, 0.18);
+  border-color: rgba(0, 217, 245, 0.45);
+  color: var(--color-brand-cyan);
+  box-shadow: 0 0 10px rgba(0, 217, 245, 0.25);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ==========================================================================
+   Mobile Responsive Adjustments
+   ========================================================================== */
+@media (max-width: 768px) {
+  .runner-3d-viewport {
+    min-height: 270px;
+    height: 270px;
+  }
+
+  .runner-hud-top {
+    top: var(--space-2);
+    left: var(--space-2);
+    right: var(--space-2);
+  }
+
+  .runner-hud-pill {
+    padding: 4px 10px;
+    font-size: 11px;
+    gap: 6px;
+  }
+
+  .runner-drag-hint {
+    display: none; /* Keep clean on small mobile viewports */
+  }
+
+  .runner-hud-bottom {
+    bottom: var(--space-2);
+    left: var(--space-2);
+    right: var(--space-2);
+    justify-content: center;
+  }
+
+  .cam-preset-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  .viz-toggle-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+}

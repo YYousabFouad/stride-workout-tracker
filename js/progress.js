@@ -1,6 +1,6 @@
 /**
  * Stride Workout Tracker — Workout In Progress Screen (progress.html)
- * Coordinates live metrics, time elapsed counters, progress bar, and completion routing.
+ * Coordinates live metrics, time elapsed counters, progress bar, 3D runner visualization, and completion routing.
  */
 
 import {
@@ -9,8 +9,11 @@ import {
   getStorageItem,
   setStorageItem,
 } from "./storage.js";
+import { Runner3D } from "./runner-3d.js";
 
 let workoutTimerInterval = null;
+let telemetryInterval = null;
+let runner3dInstance = null;
 
 export const initProgressScreen = function () {
   const viewProgress = document.getElementById("view-progress");
@@ -34,6 +37,98 @@ export const initProgressScreen = function () {
     document.querySelector(".progress-track .progress-bar");
   const endWorkoutBtn = document.getElementById("btn-end-workout");
 
+  // Visualizer DOM elements
+  const runnerViewport = document.getElementById("runner-3d-viewport");
+  const mapViewport = document.getElementById("map-viewport");
+  const btnMode3d = document.getElementById("btn-mode-3d");
+  const btnModeMap = document.getElementById("btn-mode-map");
+  const vizTitle = document.getElementById("visualizer-card-title");
+  const vizSubtitle = document.getElementById("visualizer-card-subtitle");
+  const hudCadence = document.getElementById("runner-hud-cadence");
+  const hudSpeed = document.getElementById("runner-hud-speed");
+
+  // =========================================================================
+  // 1. Initialize 3D Runner & View Mode Switcher
+  // =========================================================================
+  if (runnerViewport && !runner3dInstance) {
+    try {
+      runner3dInstance = new Runner3D(runnerViewport);
+
+      // Camera Preset Buttons
+      const camBtns = runnerViewport.querySelectorAll(".cam-preset-btn");
+      camBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          camBtns.forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          const camMode = btn.getAttribute("data-cam");
+          if (runner3dInstance) {
+            runner3dInstance.applyCameraPreset(camMode, true);
+          }
+        });
+      });
+    } catch (err) {
+      console.error("Failed to initialize 3D Runner:", err);
+    }
+  }
+
+  // View Mode Switcher (3D Runner <-> GPS Route Map)
+  if (btnMode3d && btnModeMap) {
+    btnMode3d.addEventListener("click", () => {
+      btnMode3d.classList.add("active");
+      btnMode3d.setAttribute("aria-selected", "true");
+      btnModeMap.classList.remove("active");
+      btnModeMap.setAttribute("aria-selected", "false");
+
+      if (runnerViewport) runnerViewport.style.display = "block";
+      if (mapViewport) mapViewport.style.display = "none";
+      if (vizTitle) vizTitle.textContent = "3D Live Runner";
+      if (vizSubtitle) vizSubtitle.textContent = "Biomechanical pacing & speed telemetry";
+      if (runner3dInstance) runner3dInstance.start();
+    });
+
+    btnModeMap.addEventListener("click", () => {
+      btnModeMap.classList.add("active");
+      btnModeMap.setAttribute("aria-selected", "true");
+      btnMode3d.classList.remove("active");
+      btnMode3d.setAttribute("aria-selected", "false");
+
+      if (mapViewport) mapViewport.style.display = "block";
+      if (runnerViewport) runnerViewport.style.display = "none";
+      if (vizTitle) vizTitle.textContent = "Live route";
+      if (vizSubtitle) vizSubtitle.textContent = "GPS breadcrumb tracking";
+      if (runner3dInstance) runner3dInstance.pause();
+    });
+  }
+
+  // Biomechanical Telemetry Sync Loop
+  const updateTelemetry = () => {
+    if (!runner3dInstance) return;
+
+    const sport = workout?.sport || "running";
+    const isWalk = sport === "walking";
+    const isCycle = sport === "cycling";
+
+    const baseCadence = isWalk ? 126 : isCycle ? 90 : 166;
+    const baseSpeed = isWalk ? 5.2 : isCycle ? 24.2 : 11.4;
+
+    const now = Date.now();
+    const cadence = Math.round(baseCadence + Math.sin(now / 3500) * 3);
+    const speed = (baseSpeed + Math.cos(now / 4200) * 0.3).toFixed(1);
+
+    runner3dInstance.setCadence(cadence);
+    runner3dInstance.setSpeed(parseFloat(speed));
+
+    if (hudCadence) hudCadence.textContent = `${cadence} SPM`;
+    if (hudSpeed) hudSpeed.textContent = `${speed} km/h`;
+  };
+
+  updateTelemetry();
+  if (telemetryInterval) clearInterval(telemetryInterval);
+  telemetryInterval = setInterval(updateTelemetry, 1500);
+
+  // =========================================================================
+  // 2. Telemetry and Workout State
+  // =========================================================================
   // Always reset to initial 0 state
   if (liveDistance) liveDistance.textContent = "0.0 km";
   if (liveTime) liveTime.textContent = "00:00";
@@ -106,6 +201,15 @@ export const initProgressScreen = function () {
         clearInterval(workoutTimerInterval);
         workoutTimerInterval = null;
       }
+      if (telemetryInterval) {
+        clearInterval(telemetryInterval);
+        telemetryInterval = null;
+      }
+      if (runner3dInstance) {
+        runner3dInstance.destroy();
+        runner3dInstance = null;
+      }
+
       workout.endTime = Date.now();
       workout.elapsedSeconds =
         workout.goal === "time"
@@ -120,4 +224,14 @@ export const initProgressScreen = function () {
       window.location.href = "complete.html";
     });
   }
+
+  // Cleanup on unload to prevent WebGL context leaks
+  window.addEventListener("beforeunload", () => {
+    if (workoutTimerInterval) clearInterval(workoutTimerInterval);
+    if (telemetryInterval) clearInterval(telemetryInterval);
+    if (runner3dInstance) {
+      runner3dInstance.destroy();
+      runner3dInstance = null;
+    }
+  });
 };

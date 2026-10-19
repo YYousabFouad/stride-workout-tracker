@@ -11,9 +11,12 @@ A modern, responsive web application for planning, tracking, and reviewing runni
   - Set custom workout targets by **Distance** (km) or **Time** (minutes).
   - Domain boundary validation and smart unit switching.
 - **⏱️ Screen 2: In Progress (`progress.html`)**
+  - **🏃 3D Cyberpunk Runner Visualizer**: Fully interactive 3D runner powered by **Three.js** with procedural kinematic rigging (pelvic bounce, leg drive, elbow swing), speed warp particle field, and **Vanta-inspired** dynamic undulating wave terrain.
+  - **🎥 Cinematic Camera Presets**: Smooth camera angle switching (`Perspective`, `Side`, `Follow`) with **Anime.js** tween transitions and mouse/touch 360° orbit controls.
+  - **⚡ Live Biomechanical Telemetry**: Real-time HUD displaying pace-synchronized cadence (SPM) and speed (km/h).
+  - **🗺️ GPS Route Map Toggle**: Seamless one-click switching between the 3D Runner and the GPS route tracking map.
   - Live elapsed time counter and dynamic target progress percentage.
   - Real-time progress bar with goal milestone alerts.
-  - Interactive map container with zoom and route centering controls.
 - **🏆 Screen 3: Complete (`complete.html`)**
   - Detailed workout summary displaying final distance and elapsed duration.
   - Automatic streak incrementation and streak celebration banner.
@@ -45,10 +48,13 @@ stride-workout-tracker/
 │   ├── layout.css             # Grid systems, containers, navbar, view-switcher
 │   ├── components.css         # Buttons, cards, segmented controls, forms
 │   ├── map.css                # Map canvas, route paths, and control overlays
+│   ├── runner-3d.css          # 3D viewport, HUD telemetry badges, camera presets
 │   ├── modal.css              # Modal dialogs, backdrop animations, and forms
 │   └── styles.css             # Main stylesheet entrypoint aggregating layers
 │
 ├── js/                        # Modular Native JavaScript (ES Modules)
+│   ├── vendor/                # Vendored libraries (Three.js v128, Anime.js v3.2.2)
+│   ├── runner-3d.js           # Three.js 3D runner, kinematics, Vanta wave mesh
 │   ├── storage.js             # LocalStorage helpers, keys, and sanitizers
 │   ├── navigation.js          # Screen switcher and client-side routing
 │   ├── streak.js              # Streak counter and UI badge synchronization
