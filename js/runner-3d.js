@@ -494,9 +494,9 @@ export class Runner3D {
       target = { x: 3.8, y: 1.8, z: 4.8 };
       lookTarget = { x: 0, y: 1.25, z: 0 };
     } else {
-      // Follow / Chase Companion (Behind the runner looking forward)
-      target = { x: 0, y: 2.05, z: -4.2 };
-      lookTarget = { x: 0, y: 1.35, z: 2.5 };
+      // Follow / Chase Companion (Elevated view from behind the runner)
+      target = { x: 0, y: 3.1, z: -4.8 };
+      lookTarget = { x: 0, y: 1.15, z: 2.0 };
     }
 
     if (animated && window.anime) {
@@ -620,11 +620,11 @@ export class Runner3D {
       this.neonPointLight.intensity = 2.6 + Math.sin(cycle * 2) * 0.8;
     }
 
-    // 7. Dynamic Camera Follow (Running companion perspective)
+    // 7. Dynamic Camera Follow (Running companion perspective - elevated high angle)
     if (this.cameraMode === "follow") {
       this.camera.position.x = Math.sin(cycle) * 0.08;
-      this.camera.position.y = 2.05 + bounce * 0.35;
-      this.camera.position.z = -4.2;
+      this.camera.position.y = 3.1 + bounce * 0.35;
+      this.camera.position.z = -4.8;
     }
 
     // 8. Vanta Wave Field Dynamic Undulation
@@ -665,7 +665,7 @@ export class Runner3D {
     this.updateAnimation(delta);
 
     if (this.cameraMode === "follow") {
-      this.camera.lookAt(0, 1.35, 2.5);
+      this.camera.lookAt(0, 1.15, 2.0);
     } else {
       this.camera.lookAt(0, 1.25, 0);
     }
