@@ -4,7 +4,6 @@
  */
 
 import { STORAGE_KEYS, setStorageItem } from "./storage.js";
-import { incrementStreak } from "./streak.js";
 
 export const initAccountModal = function () {
   const modal = document.getElementById("modal-account");
@@ -57,7 +56,6 @@ export const initAccountModal = function () {
     };
 
     setStorageItem(STORAGE_KEYS.USER, userProfile);
-    incrementStreak();
     closeModal();
   };
 
