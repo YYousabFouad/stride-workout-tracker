@@ -20,11 +20,6 @@ export class Runner3D {
     this.speed = 11.2; // km/h
     this.timeScale = 1.0;
     this.cameraMode = "follow"; // Default: companion chase view from his back
-    this.orbitRotation = { x: 0.12, y: Math.PI };
-
-    // Interactive mouse / touch orbit drag
-    this.isDragging = false;
-    this.prevMousePos = { x: 0, y: 0 };
 
     this.init();
   }
@@ -84,10 +79,7 @@ export class Runner3D {
     // 9. Resize Observer
     this.setupResizeObserver();
 
-    // 10. Mouse / Touch Orbit Controls
-    this.setupInteraction();
-
-    // 11. Battery & Thermal Optimization (Pause when off-screen on mobile)
+    // 10. Battery & Thermal Optimization (Pause when off-screen on mobile)
     this.setupVisibilityObserver();
 
     // Auto-start rendering loop
@@ -490,94 +482,6 @@ export class Runner3D {
     this.visibilityObserver.observe(this.container);
   }
 
-  setupInteraction() {
-    const el = this.renderer.domElement;
-
-    const onPointerDown = (clientX, clientY) => {
-      this.isDragging = true;
-      this.prevMousePos = { x: clientX, y: clientY };
-    };
-
-    const onPointerMove = (clientX, clientY) => {
-      if (!this.isDragging) return;
-      const deltaX = clientX - this.prevMousePos.x;
-      const deltaY = clientY - this.prevMousePos.y;
-
-      this.orbitRotation.y += deltaX * 0.008;
-      this.orbitRotation.x = Math.max(
-        -0.2,
-        Math.min(0.6, this.orbitRotation.x + deltaY * 0.008)
-      );
-
-      this.prevMousePos = { x: clientX, y: clientY };
-      this.updateCameraOrbit();
-    };
-
-    const onPointerUp = () => {
-      this.isDragging = false;
-      this.isTouchHorizontal = false;
-    };
-
-    el.addEventListener("mousedown", (e) => onPointerDown(e.clientX, e.clientY));
-    window.addEventListener("mousemove", (e) => onPointerMove(e.clientX, e.clientY));
-    window.addEventListener("mouseup", onPointerUp);
-
-    let touchStartX = 0;
-    let touchStartY = 0;
-    this.isTouchHorizontal = false;
-
-    el.addEventListener(
-      "touchstart",
-      (e) => {
-        if (e.touches.length === 1) {
-          touchStartX = e.touches[0].clientX;
-          touchStartY = e.touches[0].clientY;
-          this.isTouchHorizontal = false;
-          onPointerDown(touchStartX, touchStartY);
-        }
-      },
-      { passive: true }
-    );
-
-    window.addEventListener(
-      "touchmove",
-      (e) => {
-        if (this.isDragging && e.touches.length === 1) {
-          const curX = e.touches[0].clientX;
-          const curY = e.touches[0].clientY;
-          const dx = Math.abs(curX - touchStartX);
-          const dy = Math.abs(curY - touchStartY);
-
-          // Allow native vertical page scroll when swipe is predominantly vertical;
-          // only engage 3D orbit when swipe is distinctly horizontal.
-          if (!this.isTouchHorizontal && dx > 8 && dx > dy * 1.25) {
-            this.isTouchHorizontal = true;
-          }
-
-          if (this.isTouchHorizontal) {
-            onPointerMove(curX, curY);
-          }
-        }
-      },
-      { passive: true }
-    );
-
-    window.addEventListener("touchend", onPointerUp);
-  }
-
-  updateCameraOrbit() {
-    if (this.cameraMode !== "custom" && !this.isDragging) return;
-
-    const dist = 6.2;
-    const yOffset = 1.35;
-    const cosX = Math.cos(this.orbitRotation.x);
-
-    this.camera.position.x = Math.sin(this.orbitRotation.y) * dist * cosX;
-    this.camera.position.z = Math.cos(this.orbitRotation.y) * dist * cosX;
-    this.camera.position.y = Math.sin(this.orbitRotation.x) * dist + yOffset;
-    this.camera.lookAt(0, 1.25, 0);
-  }
-
   applyCameraPreset(mode, animated = true) {
     this.cameraMode = mode;
     let target = { x: 3.8, y: 1.8, z: 4.8 };
@@ -760,9 +664,7 @@ export class Runner3D {
     const delta = Math.min(this.clock.getDelta(), 0.1);
     this.updateAnimation(delta);
 
-    if (this.cameraMode === "custom" || this.isDragging) {
-      this.updateCameraOrbit();
-    } else if (this.cameraMode === "follow") {
+    if (this.cameraMode === "follow") {
       this.camera.lookAt(0, 1.35, 2.5);
     } else {
       this.camera.lookAt(0, 1.25, 0);
