@@ -15,6 +15,7 @@ import {
 let map = null;
 let watchId = null;
 let routePolyline = null;
+let routeCasingPolyline = null;
 let originMarker = null;
 let currentMarker = null;
 let routeCoords = [];
@@ -26,7 +27,9 @@ const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const OSM_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const DEFAULT_FALLBACK_COORDS = [40.7128, -74.006]; // Sensible default if no GPS or stored position yet
-const MIN_STEP_DISTANCE_KM = 0.003; // 3m jitter filter
+const MIN_STEP_DISTANCE_KM = 0.007; // 7m deadband threshold (filters micro-jitter & stationary drift)
+const MAX_ACCEPTABLE_ACCURACY_M = 35; // Discard noisy satellite multipath spikes
+const SMOOTHING_WEIGHT = 0.45; // EMA filter towards motion vector (ruler-straight segment smoothing)
 
 const getStoredLocation = function () {
   if (routeCoords.length > 0) {
@@ -96,13 +99,24 @@ const ensureMapInitialized = function (initialCoords) {
       attribution: OSM_ATTRIBUTION,
     }).addTo(map);
 
-    // Live route polyline
-    routePolyline = L.polyline(routeCoords, {
-      color: "#bbf448",
-      weight: 5,
+    // Outer casing (Google Maps crisp ruler-drawn border outline)
+    routeCasingPolyline = L.polyline(routeCoords, {
+      color: "#050b0c",
+      weight: 9,
       opacity: 0.95,
       lineCap: "round",
       lineJoin: "round",
+      smoothFactor: 1.5,
+    }).addTo(map);
+
+    // Live route polyline (vibrant inner core)
+    routePolyline = L.polyline(routeCoords, {
+      color: "#bbf448",
+      weight: 5,
+      opacity: 1,
+      lineCap: "round",
+      lineJoin: "round",
+      smoothFactor: 1.5,
     }).addTo(map);
 
     // If we already have route coordinates (e.g. resuming workout), render markers
@@ -141,8 +155,13 @@ const ensureMapInitialized = function (initialCoords) {
   return map;
 };
 
-const recordCoordinate = function (coords) {
+const recordCoordinate = function (coords, accuracy = 0) {
   if (isTrackingStopped) return;
+
+  // Filter out wild satellite multipath spikes if accuracy is poor
+  if (accuracy > MAX_ACCEPTABLE_ACCURACY_M && routeCoords.length > 0) {
+    return;
+  }
 
   setStorageItem(STORAGE_KEYS.LAST_LOCATION, coords);
   updateGpsStatusBadge(true, "Live GPS Active");
@@ -178,20 +197,34 @@ const recordCoordinate = function (coords) {
     }
   } else {
     const prev = routeCoords[routeCoords.length - 1];
-    const stepKm = calculateHaversineKm(prev, coords);
+    const rawStepKm = calculateHaversineKm(prev, coords);
 
-    if (stepKm >= MIN_STEP_DISTANCE_KM) {
-      totalTrackedDistanceKm += stepKm;
-      routeCoords.push(coords);
+    if (rawStepKm >= MIN_STEP_DISTANCE_KM) {
+      // Linear vector smoothing (Exponential Moving Average) to eliminate lateral hand shake
+      const smoothLat = prev[0] + SMOOTHING_WEIGHT * (coords[0] - prev[0]);
+      const smoothLng = prev[1] + SMOOTHING_WEIGHT * (coords[1] - prev[1]);
+      const smoothedPoint = [
+        Number(smoothLat.toFixed(6)),
+        Number(smoothLng.toFixed(6)),
+      ];
+
+      const trueStepKm = calculateHaversineKm(prev, smoothedPoint);
+      totalTrackedDistanceKm += trueStepKm;
+      routeCoords.push(smoothedPoint);
     }
   }
 
   if (map) {
+    if (routeCasingPolyline) {
+      routeCasingPolyline.setLatLngs(routeCoords);
+    }
     if (routePolyline) {
       routePolyline.setLatLngs(routeCoords);
     }
     if (currentMarker) {
-      currentMarker.setLatLng(coords);
+      const activeHead =
+        routeCoords.length > 0 ? routeCoords[routeCoords.length - 1] : coords;
+      currentMarker.setLatLng(activeHead);
     }
     map.panTo(coords, { animate: true, duration: 0.5 });
   }
@@ -246,8 +279,8 @@ export const startRouteTracking = function (options = {}) {
 
   watchId = navigator.geolocation.watchPosition(
     function (position) {
-      const { latitude, longitude } = position.coords;
-      recordCoordinate([latitude, longitude]);
+      const { latitude, longitude, accuracy } = position.coords;
+      recordCoordinate([latitude, longitude], accuracy);
     },
     function () {
       const mapContainer = document.getElementById("map-viewport");

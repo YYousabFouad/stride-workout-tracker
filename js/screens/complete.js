@@ -47,10 +47,23 @@ export const initCompleteScreen = function () {
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(summaryMap);
 
+      // Outer casing (Google Maps crisp ruler-drawn border outline)
+      L.polyline(workout.routeCoords, {
+        color: "#050b0c",
+        weight: 9,
+        opacity: 0.95,
+        lineCap: "round",
+        lineJoin: "round",
+        smoothFactor: 1.5,
+      }).addTo(summaryMap);
+
       const polyline = L.polyline(workout.routeCoords, {
         color: "#bbf448",
         weight: 5,
-        opacity: 0.95,
+        opacity: 1,
+        lineCap: "round",
+        lineJoin: "round",
+        smoothFactor: 1.5,
       }).addTo(summaryMap);
 
       L.circleMarker(workout.routeCoords[0], {
