@@ -55,17 +55,17 @@ stride-workout-tracker/
 ├── js/                        # Modular Native JavaScript (ES Modules)
 │   ├── vendor/                # Vendored libraries (Three.js v128, Anime.js v3.2.2)
 │   ├── runner-3d.js           # Three.js 3D runner, kinematics, Vanta wave mesh
-│   ├── storage.js             # LocalStorage helpers, keys, and sanitizers
+│   ├── map.js                 # Leaflet GPS route map & graceful offline fallback
+│   ├── storage.js             # LocalStorage helpers, domain constants, and sanitizers
 │   ├── navigation.js          # Screen switcher and client-side routing
 │   ├── streak.js              # Streak counter and UI badge synchronization
 │   ├── modal.js               # Account modal controller and event listeners
-│   ├── plan.js                # Plan workout screen form controller
-│   ├── progress.js            # Active workout timer loop and metrics tracker
-│   ├── complete.js            # Summary card controller and save handlers
-│   ├── history.js             # Historical workout renderer
-│   └── main.js                # Main application entrypoint & bootstrapper
-│
-└── assets/                    # Static brand assets and icons
+│   ├── plan.js                # Plan workout screen form controller (lazy-loaded)
+│   ├── progress.js            # Active workout timer loop and metrics tracker (lazy-loaded)
+│   ├── complete.js            # Summary card controller and idempotent save handlers (lazy-loaded)
+│   ├── history.js             # Historical workout renderer (lazy-loaded)
+│   └── main.js                # Main application entrypoint & dynamic module bootstrapper
+└── README.md                  # Architecture & usage documentation
 ```
 
 ---

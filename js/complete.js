@@ -4,11 +4,13 @@
  */
 
 import {
+  SPORTS,
   STORAGE_KEYS,
+  calculateEfficiencyMetric,
   getStorageItem,
   setStorageItem,
 } from "./storage.js";
-import { incrementStreak } from "./streak.js";
+import { getStreakCount, incrementStreak, updateStreakDisplay } from "./streak.js";
 
 export const initCompleteScreen = function () {
   const viewComplete = document.getElementById("view-complete");
@@ -28,30 +30,75 @@ export const initCompleteScreen = function () {
     if (timeVal) timeVal.textContent = workout.finalDuration || "00:00";
   }
 
-  // Modal alert close handling
+  updateStreakDisplay();
+
+  // Modal alert close & celebration handling
   if (alertModal) {
-    alertModal.querySelectorAll(".modal-close-btn, .btn-primary").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        alertModal.classList.remove("active");
+    const closeAlertModal = () => alertModal.classList.remove("active");
+
+    alertModal
+      .querySelectorAll(".modal-close-btn, .btn-primary")
+      .forEach((btn) => {
+        btn.addEventListener("click", closeAlertModal);
       });
+
+    alertModal.addEventListener("click", (e) => {
+      if (e.target === alertModal) closeAlertModal();
     });
+
+    if (workout && workout.targetReached && !workout.saved) {
+      const metricEl = alertModal.querySelector(".achievement-metric");
+      if (metricEl && workout.targetValue && workout.targetUnit) {
+        metricEl.textContent = `${workout.targetValue} ${workout.targetUnit}`;
+      }
+      alertModal.classList.add("active");
+    }
+  }
+
+  // Guard against duplicate saves on page reload
+  if (saveWorkoutBtn && workout && workout.saved) {
+    saveWorkoutBtn.disabled = true;
+    saveWorkoutBtn.innerHTML = `<span>Workout Saved! Streak: ${getStreakCount()} Days ✓</span>`;
   }
 
   // Save Workout & Update Streak
   if (saveWorkoutBtn) {
     saveWorkoutBtn.addEventListener("click", function () {
-      if (saveWorkoutBtn.disabled) return;
+      if (saveWorkoutBtn.disabled || (workout && workout.saved)) return;
+
+      if (workout) {
+        workout.saved = true;
+        setStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT, workout);
+        setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
+      }
 
       const newStreak = incrementStreak();
+
+      const sport = workout ? workout.sport : SPORTS.RUN;
+      const distanceKm = workout ? Number(workout.distanceKm) || 0 : 0;
+      const elapsedSeconds = workout ? Number(workout.elapsedSeconds) || 0 : 0;
+      const fallbackEfficiency = calculateEfficiencyMetric(
+        distanceKm,
+        elapsedSeconds,
+        sport
+      );
+
+      const timeStr = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
 
       // Append to workout history
       const historyList = getStorageItem(STORAGE_KEYS.HISTORY) || [];
       const historyItem = {
+        id: workout?.id || `workout_${Date.now()}`,
         title: workout ? `${workout.sportLabel} Session` : "Morning Run",
-        date: "Today · Just now",
+        date: `Today · ${timeStr}`,
         distance: workout ? workout.finalDistance || "0.0 km" : "0.0 km",
         duration: workout ? workout.finalDuration || "00:00" : "00:00",
-        sport: workout ? workout.sport : "run",
+        efficiencyValue: workout?.efficiencyValue || fallbackEfficiency.value,
+        efficiencyLabel: workout?.efficiencyLabel || fallbackEfficiency.label,
+        sport,
       };
       historyList.unshift(historyItem);
       setStorageItem(STORAGE_KEYS.HISTORY, historyList);

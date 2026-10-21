@@ -3,18 +3,41 @@
  * Manages modal dialogues, backdrop clicks, Escape key, and account creation.
  */
 
-import { STORAGE_KEYS, setStorageItem } from "./storage.js";
+import { STORAGE_KEYS, getStorageItem, setStorageItem } from "./storage.js";
 
 export const initAccountModal = function () {
   const modal = document.getElementById("modal-account");
   const openBtn = document.getElementById("btn-open-account");
   if (!modal) return;
 
+  const usernameInput = document.getElementById("input-username");
+  const emailInput = document.getElementById("input-email");
+
+  const syncAccountNavButton = function () {
+    const savedUser = getStorageItem(STORAGE_KEYS.USER);
+    if (!savedUser || !openBtn) return;
+    const labelSpan = openBtn.querySelector("span");
+    if (labelSpan && savedUser.username) {
+      labelSpan.textContent = savedUser.username;
+    }
+  };
+
+  syncAccountNavButton();
+
   const closeModal = function () {
     modal.classList.remove("active");
   };
 
   const openModal = function () {
+    const savedUser = getStorageItem(STORAGE_KEYS.USER);
+    if (savedUser) {
+      if (usernameInput && savedUser.username) {
+        usernameInput.value = savedUser.username;
+      }
+      if (emailInput && savedUser.email) {
+        emailInput.value = savedUser.email;
+      }
+    }
     modal.classList.add("active");
   };
 
@@ -32,11 +55,12 @@ export const initAccountModal = function () {
     if (e.target === modal) closeModal();
   });
 
-  // Close on Escape key
+  // Close any active modal on Escape key
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && modal.classList.contains("active")) {
-      closeModal();
-    }
+    if (e.key !== "Escape") return;
+    document.querySelectorAll(".modal-overlay.active").forEach((activeModal) => {
+      activeModal.classList.remove("active");
+    });
   });
 
   // Account creation handling
@@ -44,8 +68,6 @@ export const initAccountModal = function () {
   const submitBtn = modal.querySelector(".modal-footer .btn-primary");
 
   const handleAccountCreate = function () {
-    const usernameInput = document.getElementById("input-username");
-    const emailInput = document.getElementById("input-email");
     const username = usernameInput ? usernameInput.value.trim() : "";
     const email = emailInput ? emailInput.value.trim() : "";
 
@@ -56,16 +78,17 @@ export const initAccountModal = function () {
     };
 
     setStorageItem(STORAGE_KEYS.USER, userProfile);
+    syncAccountNavButton();
     closeModal();
   };
 
-  if (submitBtn) {
-    submitBtn.addEventListener("click", handleAccountCreate);
-  }
   if (form) {
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       handleAccountCreate();
     });
+  }
+  if (submitBtn && submitBtn.type !== "submit") {
+    submitBtn.addEventListener("click", handleAccountCreate);
   }
 };

@@ -674,7 +674,10 @@ export class Runner3D {
     this.animationFrameId = requestAnimationFrame(() => this.render());
   }
 
-  start() {
+  start(resetManual = false) {
+    if (resetManual) {
+      this.manuallyPaused = false;
+    }
     this.resize();
     if (this.isRunning) return;
     this.isRunning = true;
@@ -682,7 +685,10 @@ export class Runner3D {
     this.render();
   }
 
-  pause() {
+  pause(isManual = false) {
+    if (isManual) {
+      this.manuallyPaused = true;
+    }
     this.isRunning = false;
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
@@ -691,16 +697,26 @@ export class Runner3D {
   }
 
   destroy() {
-    this.pause();
+    this.pause(true);
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
     }
     if (this.visibilityObserver) {
       this.visibilityObserver.disconnect();
     }
-    if (this.vantaWaveMesh) {
-      this.vantaWaveMesh.geometry.dispose();
-      if (this.vantaWaveMesh.material) this.vantaWaveMesh.material.dispose();
+    if (this.scene) {
+      this.scene.traverse((obj) => {
+        if (obj.geometry) {
+          obj.geometry.dispose();
+        }
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
+      });
     }
     if (this.renderer && this.renderer.domElement) {
       this.renderer.domElement.remove();

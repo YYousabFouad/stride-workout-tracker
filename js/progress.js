@@ -4,13 +4,16 @@
  */
 
 import {
+  GOAL_TYPES,
+  SPORTS,
   STORAGE_KEYS,
+  calculateEfficiencyMetric,
+  formatDistance,
   formatTime,
   getStorageItem,
   setStorageItem,
 } from "./storage.js";
 import { Runner3D } from "./runner-3d.js";
-import { loadMap } from "./map.js";
 
 let workoutTimerInterval = null;
 let telemetryInterval = null;
@@ -48,6 +51,11 @@ export const initProgressScreen = function () {
   const hudCadence = document.getElementById("runner-hud-cadence");
   const hudSpeed = document.getElementById("runner-hud-speed");
 
+  const sport = workout?.sport || SPORTS.RUN;
+  const isRide = sport === SPORTS.RIDE;
+  const baseCadence = isRide ? 90 : 166;
+  const baseSpeed = isRide ? 24.2 : 11.4;
+
   // =========================================================================
   // 1. Initialize 3D Runner & View Mode Switcher
   // =========================================================================
@@ -83,14 +91,15 @@ export const initProgressScreen = function () {
       if (runnerViewport) runnerViewport.style.display = "block";
       if (mapViewport) mapViewport.style.display = "none";
       if (vizTitle) vizTitle.textContent = "3D Live Runner";
-      if (vizSubtitle) vizSubtitle.textContent = "Biomechanical pacing & speed telemetry";
+      if (vizSubtitle)
+        vizSubtitle.textContent = "Biomechanical pacing & speed telemetry";
       if (runner3dInstance) {
-        runner3dInstance.start();
+        runner3dInstance.start(true);
         runner3dInstance.resize();
       }
     });
 
-    btnModeMap.addEventListener("click", () => {
+    btnModeMap.addEventListener("click", async () => {
       btnModeMap.classList.add("active");
       btnModeMap.setAttribute("aria-selected", "true");
       btnMode3d.classList.remove("active");
@@ -100,7 +109,9 @@ export const initProgressScreen = function () {
       if (runnerViewport) runnerViewport.style.display = "none";
       if (vizTitle) vizTitle.textContent = "Live route";
       if (vizSubtitle) vizSubtitle.textContent = "GPS breadcrumb tracking";
-      if (runner3dInstance) runner3dInstance.pause();
+      if (runner3dInstance) runner3dInstance.pause(true);
+
+      const { loadMap } = await import("./map.js");
       loadMap();
     });
   }
@@ -109,13 +120,6 @@ export const initProgressScreen = function () {
   const updateTelemetry = () => {
     if (!runner3dInstance) return;
 
-    const sport = workout?.sport || "running";
-    const isWalk = sport === "walking";
-    const isCycle = sport === "cycling";
-
-    const baseCadence = isWalk ? 126 : isCycle ? 90 : 166;
-    const baseSpeed = isWalk ? 5.2 : isCycle ? 24.2 : 11.4;
-
     const now = Date.now();
     const cadence = Math.round(baseCadence + Math.sin(now / 3500) * 3);
     const speed = (baseSpeed + Math.cos(now / 4200) * 0.3).toFixed(1);
@@ -123,7 +127,8 @@ export const initProgressScreen = function () {
     runner3dInstance.setCadence(cadence);
     runner3dInstance.setSpeed(parseFloat(speed));
 
-    if (hudCadence) hudCadence.textContent = `${cadence} SPM`;
+    if (hudCadence)
+      hudCadence.textContent = `${cadence} ${isRide ? "RPM" : "SPM"}`;
     if (hudSpeed) hudSpeed.textContent = `${speed} km/h`;
   };
 
@@ -134,7 +139,6 @@ export const initProgressScreen = function () {
   // =========================================================================
   // 2. Telemetry and Workout State
   // =========================================================================
-  // Always reset to initial 0 state
   if (liveDistance) liveDistance.textContent = "0.0 km";
   if (liveTime) liveTime.textContent = "00:00";
   if (progressPercent) progressPercent.textContent = "0%";
@@ -158,7 +162,8 @@ export const initProgressScreen = function () {
   }
 
   // Visual highlight on target metric
-  if (workout.goal === "time") {
+  const isTimeGoal = workout.goal === GOAL_TYPES.TIME;
+  if (isTimeGoal) {
     if (liveDistance) liveDistance.classList.remove("highlight");
     if (liveTime) liveTime.classList.add("highlight");
   } else {
@@ -172,32 +177,38 @@ export const initProgressScreen = function () {
     workoutTimerInterval = null;
   }
 
-  // Timer: "if it's time start a timer and don't do anything to kilometers"
-  if (workout.goal === "time") {
-    const targetSeconds = (Number(workout.targetValue) || 30) * 60;
+  const targetValue = Number(workout.targetValue) || (isTimeGoal ? 30 : 5.0);
+  const targetSeconds = isTimeGoal ? targetValue * 60 : 0;
 
-    const updateTimer = function () {
-      const elapsedSeconds = Math.max(
-        0,
-        Math.floor((Date.now() - workout.startTime) / 1000)
-      );
-      if (liveTime) liveTime.textContent = formatTime(elapsedSeconds);
+  const computeLiveMetrics = function () {
+    const elapsedSeconds = Math.max(
+      0,
+      Math.floor((Date.now() - workout.startTime) / 1000)
+    );
+    const distanceKm = (elapsedSeconds / 3600) * baseSpeed;
+    const rawPercent = isTimeGoal
+      ? (elapsedSeconds / targetSeconds) * 100
+      : (distanceKm / targetValue) * 100;
+    const percent = Math.min(100, Math.max(0, Math.floor(rawPercent)));
 
-      const percent = Math.min(
-        100,
-        Math.floor((elapsedSeconds / targetSeconds) * 100)
-      );
-      if (progressPercent) progressPercent.textContent = `${percent}%`;
-      if (progressBar) progressBar.style.width = `${percent}%`;
+    return { elapsedSeconds, distanceKm, percent };
+  };
 
-      if (percent >= 100 && targetHint) {
-        targetHint.textContent = `Target reached! You completed ${workout.targetValue} ${workout.targetUnit} 🎉`;
-      }
-    };
+  const updateWorkoutLoop = function () {
+    const { elapsedSeconds, distanceKm, percent } = computeLiveMetrics();
 
-    updateTimer();
-    workoutTimerInterval = setInterval(updateTimer, 1000);
-  }
+    if (liveTime) liveTime.textContent = formatTime(elapsedSeconds);
+    if (liveDistance) liveDistance.textContent = formatDistance(distanceKm);
+    if (progressPercent) progressPercent.textContent = `${percent}%`;
+    if (progressBar) progressBar.style.width = `${percent}%`;
+
+    if (percent >= 100 && targetHint) {
+      targetHint.textContent = `Target reached! You completed ${workout.targetValue} ${workout.targetUnit} 🎉`;
+    }
+  };
+
+  updateWorkoutLoop();
+  workoutTimerInterval = setInterval(updateWorkoutLoop, 1000);
 
   // End Workout
   if (endWorkoutBtn) {
@@ -215,13 +226,21 @@ export const initProgressScreen = function () {
         runner3dInstance = null;
       }
 
+      const { elapsedSeconds, distanceKm, percent } = computeLiveMetrics();
+      const efficiency = calculateEfficiencyMetric(
+        distanceKm,
+        elapsedSeconds,
+        workout.sport
+      );
+
       workout.endTime = Date.now();
-      workout.elapsedSeconds =
-        workout.goal === "time"
-          ? Math.max(0, Math.floor((Date.now() - workout.startTime) / 1000))
-          : 0;
-      workout.finalDuration = formatTime(workout.elapsedSeconds);
-      workout.finalDistance = "0.0 km";
+      workout.elapsedSeconds = elapsedSeconds;
+      workout.distanceKm = Number(distanceKm.toFixed(2));
+      workout.finalDuration = formatTime(elapsedSeconds);
+      workout.finalDistance = formatDistance(distanceKm);
+      workout.efficiencyValue = efficiency.value;
+      workout.efficiencyLabel = efficiency.label;
+      workout.targetReached = percent >= 100;
       workout.status = "complete";
 
       setStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT, workout);

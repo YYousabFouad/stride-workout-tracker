@@ -3,13 +3,18 @@
  * Configures workout goals, sport selection, targets, and launches workouts.
  */
 
-import { STORAGE_KEYS, sanitizeTarget, setStorageItem } from "./storage.js";
+import {
+  GOAL_TYPES,
+  SPORTS,
+  STORAGE_KEYS,
+  sanitizeTarget,
+  setStorageItem,
+} from "./storage.js";
 
 export const initPlanWorkoutScreen = function () {
   const workoutForm = document.querySelector(".workout-form");
   const targetInput = document.getElementById("target-input");
   const targetUnitLabel = document.getElementById("target-unit-label");
-  const startWorkoutBtn = document.getElementById("btn-start-workout");
 
   if (!workoutForm || !targetInput) return;
 
@@ -17,12 +22,12 @@ export const initPlanWorkoutScreen = function () {
     if (clickedBtn.dataset.group !== "goal") return;
     if (!targetUnitLabel) return;
 
-    if (clickedBtn.dataset.value === "distance") {
+    if (clickedBtn.dataset.value === GOAL_TYPES.DISTANCE) {
       targetUnitLabel.textContent = "km";
       targetInput.value = "5.0";
       targetInput.step = "0.5";
       targetInput.min = "0.5";
-    } else if (clickedBtn.dataset.value === "time") {
+    } else if (clickedBtn.dataset.value === GOAL_TYPES.TIME) {
       targetUnitLabel.textContent = "min";
       targetInput.value = "30";
       targetInput.step = "1";
@@ -43,20 +48,23 @@ export const initPlanWorkoutScreen = function () {
   };
 
   const handleStartWorkout = function () {
-    const activeSportBtn = document.querySelector(
+    const activeSportBtn = workoutForm.querySelector(
       '.segmented-btn[data-group="sport"].active'
     );
-    const activeGoalBtn = document.querySelector(
+    const activeGoalBtn = workoutForm.querySelector(
       '.segmented-btn[data-group="goal"].active'
     );
 
-    const sport = activeSportBtn ? activeSportBtn.dataset.value : "run";
-    const sportLabel = sport === "ride" ? "Riding" : "Running";
-    const goal = activeGoalBtn ? activeGoalBtn.dataset.value : "distance";
+    const sport = activeSportBtn ? activeSportBtn.dataset.value : SPORTS.RUN;
+    const sportLabel = sport === SPORTS.RIDE ? "Riding" : "Running";
+    const goal = activeGoalBtn
+      ? activeGoalBtn.dataset.value
+      : GOAL_TYPES.DISTANCE;
     const targetVal = sanitizeTarget(targetInput.value, goal);
-    const targetUnit = goal === "distance" ? "km" : "min";
+    const targetUnit = goal === GOAL_TYPES.DISTANCE ? "km" : "min";
 
     const workoutData = {
+      id: `workout_${Date.now()}`,
       sport,
       sportLabel,
       goal,
@@ -64,6 +72,7 @@ export const initPlanWorkoutScreen = function () {
       targetUnit,
       startTime: Date.now(),
       status: "in_progress",
+      saved: false,
     };
 
     setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workoutData);
@@ -80,8 +89,4 @@ export const initPlanWorkoutScreen = function () {
     e.preventDefault();
     handleStartWorkout();
   });
-
-  if (startWorkoutBtn) {
-    startWorkoutBtn.addEventListener("click", handleStartWorkout);
-  }
 };

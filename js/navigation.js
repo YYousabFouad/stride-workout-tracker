@@ -22,17 +22,24 @@ export const initNavigation = function () {
     const navBtn = e.target.closest(".view-btn, .mobile-nav-item");
     if (!navBtn) return;
 
-    // Check href attribute first if it's an anchor tag
     const href = navBtn.getAttribute("href");
     const btnText = navBtn.textContent.trim();
-    const allBtns = Array.from(document.querySelectorAll(".view-switcher .view-btn"));
+    const allBtns = Array.from(
+      document.querySelectorAll(".view-switcher .view-btn")
+    );
     const btnIndex = allBtns.indexOf(navBtn);
     const targetPage = href || routesByTitle[btnText] || routeList[btnIndex];
 
     if (!targetPage) return;
 
-    const currentPath = window.location.pathname.split("/").pop() || "index.html";
-    if (currentPath !== targetPage) {
+    const currentPath =
+      window.location.pathname.split("/").pop() || "index.html";
+    if (currentPath === targetPage) {
+      e.preventDefault();
+      return;
+    }
+
+    if (!href) {
       window.location.href = targetPage;
     }
   });

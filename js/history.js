@@ -3,7 +3,7 @@
  * Loads saved workouts from localStorage and dynamically renders historical entries.
  */
 
-import { STORAGE_KEYS, getStorageItem } from "./storage.js";
+import { SPORTS, STORAGE_KEYS, getStorageItem } from "./storage.js";
 
 export const initHistoryScreen = function () {
   const viewHistory = document.getElementById("view-history");
@@ -12,9 +12,15 @@ export const initHistoryScreen = function () {
   const historyContainer = document.querySelector(".history-list");
   const storedHistory = getStorageItem(STORAGE_KEYS.HISTORY);
 
-  if (historyContainer && Array.isArray(storedHistory) && storedHistory.length > 0) {
+  if (
+    historyContainer &&
+    Array.isArray(storedHistory) &&
+    storedHistory.length > 0
+  ) {
+    const fragment = document.createDocumentFragment();
+
     storedHistory.forEach((item) => {
-      const isRide = item.sport === "ride";
+      const isRide = item.sport === SPORTS.RIDE;
       const iconPath = isRide
         ? '<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-3 11.5L9 9l3-3 3 4.5 3.5-1"/>'
         : '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>';
@@ -29,12 +35,22 @@ export const initHistoryScreen = function () {
         <div class="history-metrics">
           <div><div class="history-metric-val distance"></div><div class="history-metric-unit">Distance</div></div>
           <div><div class="history-metric-val duration"></div><div class="history-metric-unit">Duration</div></div>
+          <div><div class="history-metric-val efficiency-val"></div><div class="history-metric-unit efficiency-label"></div></div>
         </div>`;
-      entry.querySelector(".history-title").textContent = item.title ?? "Workout";
+
+      entry.querySelector(".history-title").textContent =
+        item.title ?? "Workout";
       entry.querySelector(".history-date").textContent = item.date ?? "";
       entry.querySelector(".distance").textContent = item.distance ?? "0.0 km";
       entry.querySelector(".duration").textContent = item.duration ?? "00:00";
-      historyContainer.prepend(entry);
+      entry.querySelector(".efficiency-val").textContent =
+        item.efficiencyValue ?? (isRide ? "0.0" : "--:--");
+      entry.querySelector(".efficiency-label").textContent =
+        item.efficiencyLabel ?? (isRide ? "Speed (km/h)" : "Pace (/km)");
+
+      fragment.appendChild(entry);
     });
+
+    historyContainer.prepend(fragment);
   }
 };

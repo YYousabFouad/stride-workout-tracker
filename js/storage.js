@@ -1,6 +1,6 @@
 /**
- * Stride Workout Tracker — Storage & Utility Helpers
- * Single source of truth for localStorage keys and data transformations.
+ * Stride Workout Tracker — Storage & Domain Utility Helpers
+ * Single source of truth for localStorage keys, domain constants, and data transformations.
  */
 
 export const STORAGE_KEYS = {
@@ -9,6 +9,16 @@ export const STORAGE_KEYS = {
   HISTORY: "stride_history",
   STREAK: "stride_streak",
   USER: "stride_user",
+};
+
+export const SPORTS = {
+  RUN: "run",
+  RIDE: "ride",
+};
+
+export const GOAL_TYPES = {
+  DISTANCE: "distance",
+  TIME: "time",
 };
 
 /**
@@ -33,6 +43,46 @@ export const formatTime = function (totalSeconds) {
 };
 
 /**
+ * Format distance in kilometers to a display string (e.g. "5.0 km")
+ * @param {number} distanceKm
+ * @returns {string}
+ */
+export const formatDistance = function (distanceKm) {
+  const safeKm = Math.max(0, Number(distanceKm) || 0);
+  return `${safeKm.toFixed(1)} km`;
+};
+
+/**
+ * Calculate sport-appropriate efficiency metric (Pace /km for running, Speed km/h for riding)
+ * @param {number} distanceKm
+ * @param {number} elapsedSeconds
+ * @param {string} sport
+ * @returns {{ value: string, label: string }}
+ */
+export const calculateEfficiencyMetric = function (
+  distanceKm,
+  elapsedSeconds,
+  sport
+) {
+  const safeKm = Math.max(0, Number(distanceKm) || 0);
+  const safeSec = Math.max(0, Number(elapsedSeconds) || 0);
+
+  if (sport === SPORTS.RIDE) {
+    const speedKmh = safeSec > 0 ? (safeKm / (safeSec / 3600)).toFixed(1) : "0.0";
+    return { value: speedKmh, label: "Speed (km/h)" };
+  }
+
+  if (safeKm <= 0.01 || safeSec <= 0) {
+    return { value: "--:--", label: "Pace (/km)" };
+  }
+
+  const paceSecondsPerKm = Math.round(safeSec / safeKm);
+  const mins = Math.floor(paceSecondsPerKm / 60);
+  const secs = String(paceSecondsPerKm % 60).padStart(2, "0");
+  return { value: `${mins}:${secs}`, label: "Pace (/km)" };
+};
+
+/**
  * Sanitize and enforce domain boundaries for workout target input
  * @param {string|number} rawValue
  * @param {'distance'|'time'} goal
@@ -41,11 +91,11 @@ export const formatTime = function (totalSeconds) {
 export const sanitizeTarget = function (rawValue, goal) {
   const parsed = parseFloat(rawValue);
   if (isNaN(parsed) || parsed <= 0) {
-    return goal === "distance" ? 5.0 : 30;
+    return goal === GOAL_TYPES.DISTANCE ? 5.0 : 30;
   }
   // Bounds checking: 0.5km - 100km or 1min - 720min (12 hrs)
-  const min = goal === "distance" ? 0.5 : 1;
-  const max = goal === "distance" ? 100 : 720;
+  const min = goal === GOAL_TYPES.DISTANCE ? 0.5 : 1;
+  const max = goal === GOAL_TYPES.DISTANCE ? 100 : 720;
   return Math.min(Math.max(parsed, min), max);
 };
 

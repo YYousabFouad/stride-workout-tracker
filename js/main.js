@@ -1,26 +1,40 @@
 /**
  * Stride Workout Tracker — Main Application Entrypoint
- * Orchestrates modular controllers and handles application bootstrapping.
+ * Orchestrates global shell controllers and dynamically loads screen-specific modules.
  */
 
 import { initNavigation } from "./navigation.js";
 import { updateStreakDisplay } from "./streak.js";
 import { initAccountModal } from "./modal.js";
-import { initPlanWorkoutScreen } from "./plan.js";
-import { initProgressScreen } from "./progress.js";
-import { initCompleteScreen } from "./complete.js";
-import { initHistoryScreen } from "./history.js";
 
-const bootstrap = function () {
+const bootstrap = async function () {
+  // 1. Initialize lightweight global shell controllers
   initNavigation();
   updateStreakDisplay();
   initAccountModal();
-  initPlanWorkoutScreen();
-  initProgressScreen();
-  initCompleteScreen();
-  initHistoryScreen();
 
-  // Navigation button shortcuts
+  // 2. Dynamically load only the controller for the active screen
+  if (document.getElementById("view-plan")) {
+    const { initPlanWorkoutScreen } = await import("./plan.js");
+    initPlanWorkoutScreen();
+  }
+
+  if (document.getElementById("view-progress")) {
+    const { initProgressScreen } = await import("./progress.js");
+    initProgressScreen();
+  }
+
+  if (document.getElementById("view-complete")) {
+    const { initCompleteScreen } = await import("./complete.js");
+    initCompleteScreen();
+  }
+
+  if (document.getElementById("view-history")) {
+    const { initHistoryScreen } = await import("./history.js");
+    initHistoryScreen();
+  }
+
+  // 3. Global navigation button shortcuts
   const viewHistoryBtn = document.getElementById("btn-view-history");
   if (viewHistoryBtn) {
     viewHistoryBtn.addEventListener("click", () => {
