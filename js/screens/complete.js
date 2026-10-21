@@ -16,9 +16,16 @@ export const initCompleteScreen = function () {
   const viewComplete = document.getElementById("view-complete");
   if (!viewComplete) return;
 
+  const activeWorkout = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
+  const completedWorkout = getStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT);
   const workout =
-    getStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT) ||
-    getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
+    activeWorkout?.status === "complete"
+      ? activeWorkout
+      : activeWorkout?.status === "in_progress"
+        ? null
+        : completedWorkout?.status === "complete"
+          ? completedWorkout
+          : null;
 
   const distVal = document.getElementById("complete-distance-val");
   const timeVal = document.getElementById("complete-time-val");
@@ -90,6 +97,11 @@ export const initCompleteScreen = function () {
     }
   }
 
+  if (!workout && saveWorkoutBtn) {
+    saveWorkoutBtn.disabled = true;
+    saveWorkoutBtn.textContent = "No completed workout to save";
+  }
+
   updateStreakDisplay();
 
   // Modal alert close & celebration handling
@@ -125,19 +137,17 @@ export const initCompleteScreen = function () {
 
   // Save Workout & Update Streak
   const saveWorkout = function () {
-    if (!saveWorkoutBtn || saveWorkoutBtn.disabled || (workout && workout.saved)) return;
+    if (!workout || !saveWorkoutBtn || saveWorkoutBtn.disabled || workout.saved) return;
 
-    if (workout) {
-      workout.saved = true;
-      setStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT, workout);
-      setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
-    }
+    workout.saved = true;
+    setStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT, workout);
+    setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
 
     const newStreak = incrementStreak();
 
-    const sport = workout ? workout.sport : SPORTS.RUN;
-    const distanceKm = workout ? Number(workout.distanceKm) || 0 : 0;
-    const elapsedSeconds = workout ? Number(workout.elapsedSeconds) || 0 : 0;
+    const sport = workout.sport || SPORTS.RUN;
+    const distanceKm = Number(workout.distanceKm) || 0;
+    const elapsedSeconds = Number(workout.elapsedSeconds) || 0;
     const fallbackEfficiency = calculateEfficiencyMetric(
       distanceKm,
       elapsedSeconds,
@@ -150,13 +160,14 @@ export const initCompleteScreen = function () {
     });
 
     // Append to workout history
-    const historyList = getStorageItem(STORAGE_KEYS.HISTORY) || [];
+    const storedHistory = getStorageItem(STORAGE_KEYS.HISTORY);
+    const historyList = Array.isArray(storedHistory) ? storedHistory : [];
     const historyItem = {
-      id: workout?.id || `workout_${Date.now()}`,
-      title: workout ? `${workout.sportLabel} Session` : "Morning Run",
+      id: workout.id || `workout_${Date.now()}`,
+      title: `${workout.sportLabel || "Running"} Session`,
       date: `Today · ${timeStr}`,
-      distance: workout ? workout.finalDistance || "0.0 km" : "0.0 km",
-      duration: workout ? workout.finalDuration || "00:00" : "00:00",
+      distance: workout.finalDistance || "0.0 km",
+      duration: workout.finalDuration || "00:00",
       efficiencyValue: workout?.efficiencyValue || fallbackEfficiency.value,
       efficiencyLabel: workout?.efficiencyLabel || fallbackEfficiency.label,
       sport,
@@ -170,7 +181,7 @@ export const initCompleteScreen = function () {
 
   if (saveWorkoutBtn) {
     saveWorkoutBtn.addEventListener("click", function () {
-      if (saveWorkoutBtn.disabled || (workout && workout.saved)) return;
+      if (saveWorkoutBtn.disabled || workout?.saved) return;
 
       if (!getStorageItem(STORAGE_KEYS.USER)) {
         waitingForAccount = true;

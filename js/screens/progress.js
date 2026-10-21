@@ -204,9 +204,9 @@ export const initProgressScreen = function () {
       0,
       Math.floor((Date.now() - workout.startTime) / 1000)
     );
-    const simulatedDistanceKm = (elapsedSeconds / 3600) * baseSpeed;
-    const distanceKm =
-      gpsDistanceKm > 0 ? gpsDistanceKm : simulatedDistanceKm;
+    // Distance goals must reflect measured GPS movement. A speed estimate here
+    // can otherwise complete a workout even when location access is unavailable.
+    const distanceKm = gpsDistanceKm;
     const rawPercent = isTimeGoal
       ? (elapsedSeconds / targetSeconds) * 100
       : (distanceKm / targetValue) * 100;

@@ -208,8 +208,10 @@ const recordCoordinate = function (coords, accuracy = 0) {
         Number(smoothLng.toFixed(6)),
       ];
 
-      const trueStepKm = calculateHaversineKm(prev, smoothedPoint);
-      totalTrackedDistanceKm += trueStepKm;
+      // Keep display smoothing separate from measurement: measuring from the
+      // previous point to the smoothed point would count only SMOOTHING_WEIGHT
+      // of each accepted GPS step.
+      totalTrackedDistanceKm += rawStepKm;
       routeCoords.push(smoothedPoint);
     }
   }

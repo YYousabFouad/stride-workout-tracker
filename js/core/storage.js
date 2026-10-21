@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
   COMPLETED_WORKOUT: "stride_completed_workout",
   HISTORY: "stride_history",
   STREAK: "stride_streak",
+  STREAK_LAST_ACTIVITY: "stride_streak_last_activity",
   USER: "stride_user",
   LAST_LOCATION: "stride_last_location",
 };
