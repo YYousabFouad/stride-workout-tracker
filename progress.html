@@ -13,8 +13,20 @@
     />
     <!-- Stride Design System Stylesheet -->
     <link rel="stylesheet" href="css/styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <script
+      defer
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
     <!-- Anime.js for smooth camera animations -->
-    <script src="js/vendor/anime.min.js"></script>
+    <script defer src="js/vendor/anime.min.js"></script>
   </head>
   <body>
     <!-- Top Navigation Bar -->
@@ -90,21 +102,48 @@
           <div class="workout-card map-card-container">
             <div class="card-header u-flex-between">
               <div>
-                <h2 class="card-title" id="visualizer-card-title">3D Live Runner</h2>
-                <p class="card-subtitle" id="visualizer-card-subtitle">Biomechanical pacing & speed telemetry</p>
+                <h2 class="card-title" id="visualizer-card-title">
+                  3D Live Runner
+                </h2>
+                <p class="card-subtitle" id="visualizer-card-subtitle">
+                  Biomechanical pacing & speed telemetry
+                </p>
               </div>
-              <div class="visualizer-toggle-group" role="tablist" aria-label="Visualizer Mode">
-                <button type="button" class="viz-toggle-btn active" id="btn-mode-3d" role="tab" aria-selected="true" title="Switch to 3D Runner">
+              <div
+                class="visualizer-toggle-group"
+                role="tablist"
+                aria-label="Visualizer Mode"
+              >
+                <button
+                  type="button"
+                  class="viz-toggle-btn active"
+                  id="btn-mode-3d"
+                  role="tab"
+                  aria-selected="true"
+                  title="Switch to 3D Runner"
+                >
                   <span class="viz-icon">🏃</span> 3D Runner
                 </button>
-                <button type="button" class="viz-toggle-btn" id="btn-mode-map" role="tab" aria-selected="false" title="Switch to GPS Route Map">
+                <button
+                  type="button"
+                  class="viz-toggle-btn"
+                  id="btn-mode-map"
+                  role="tab"
+                  aria-selected="false"
+                  title="Switch to GPS Route Map"
+                >
                   <span class="viz-icon">🗺️</span> GPS Route
                 </button>
               </div>
             </div>
 
             <!-- 3D Cyberpunk Runner Viewport -->
-            <div id="runner-3d-viewport" class="runner-3d-viewport" role="region" aria-label="3D Interactive Runner">
+            <div
+              id="runner-3d-viewport"
+              class="runner-3d-viewport"
+              role="region"
+              aria-label="3D Interactive Runner"
+            >
               <!-- Top HUD Overlay -->
               <div class="runner-hud-top">
                 <div class="runner-hud-pill">
@@ -117,76 +156,47 @@
 
               <!-- Bottom Camera Preset Controls -->
               <div class="runner-hud-bottom">
-                <div class="runner-camera-controls" role="group" aria-label="Camera Presets">
-                  <button type="button" class="cam-preset-btn" data-cam="perspective" title="Perspective Angle">Perspective</button>
-                  <button type="button" class="cam-preset-btn" data-cam="side" title="Side Profile">Side</button>
-                  <button type="button" class="cam-preset-btn active" data-cam="follow" title="Follow Runner">Follow</button>
+                <div
+                  class="runner-camera-controls"
+                  role="group"
+                  aria-label="Camera Presets"
+                >
+                  <button
+                    type="button"
+                    class="cam-preset-btn"
+                    data-cam="perspective"
+                    title="Perspective Angle"
+                  >
+                    Perspective
+                  </button>
+                  <button
+                    type="button"
+                    class="cam-preset-btn"
+                    data-cam="side"
+                    title="Side Profile"
+                  >
+                    Side
+                  </button>
+                  <button
+                    type="button"
+                    class="cam-preset-btn active"
+                    data-cam="follow"
+                    title="Follow Runner"
+                  >
+                    Follow
+                  </button>
                 </div>
               </div>
             </div>
 
             <!-- GPS Route Map Viewport -->
-            <div id="map-viewport" class="map-viewport" style="display: none;" role="region" aria-label="GPS Route Map">
-              <div class="map-grid-layer"></div>
-              <!-- Figma Exact Route Path Representation -->
-              <svg
-                class="route-vector-svg"
-                viewBox="0 0 500 350"
-                preserveAspectRatio="none"
-              >
-                <!-- Route Path Line -->
-                <path
-                  class="route-polyline"
-                  d="M 80,180 L 190,180 L 190,95 L 340,95"
-                />
-                <!-- Origin Dot -->
-                <circle class="route-origin-marker" cx="80" cy="180" r="7" />
-              </svg>
-              <!-- Pulsing Current Location Marker -->
-              <div class="route-pulse-marker" style="left: 68%; top: 27%"></div>
-
-              <!-- Floating Controls -->
-              <div class="map-controls-group">
-                <button class="map-control-btn" title="Zoom in" aria-label="Zoom in">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
-                </button>
-                <button class="map-control-btn" title="Zoom out" aria-label="Zoom out">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
-                </button>
-                <button class="map-control-btn" title="Center route" aria-label="Center route">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M3 12h3m12 0h3M12 3v3m0 12v3"></path>
-                  </svg>
-                </button>
-              </div>
-            </div>
+            <div
+              id="map-viewport"
+              class="map-viewport"
+              style="display: none"
+              role="region"
+              aria-label="GPS Route Map"
+            ></div>
           </div>
 
           <!-- Right Card: Live Metrics Counters & Controls -->
@@ -222,10 +232,16 @@
                 <div class="progress-container">
                   <div class="progress-header">
                     <span>Target completion</span>
-                    <span class="u-text-brand" id="live-progress-percent">0%</span>
+                    <span class="u-text-brand" id="live-progress-percent"
+                      >0%</span
+                    >
                   </div>
                   <div class="progress-track">
-                    <div class="progress-bar" id="live-progress-bar" style="width: 0%"></div>
+                    <div
+                      class="progress-bar"
+                      id="live-progress-bar"
+                      style="width: 0%"
+                    ></div>
                   </div>
                 </div>
               </div>
@@ -355,7 +371,14 @@
     <!-- Mobile Bottom Navigation Bar (Phone Screens) -->
     <nav class="mobile-bottom-nav" aria-label="Mobile Navigation">
       <a href="index.html" class="mobile-nav-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <circle cx="12" cy="12" r="10"></circle>
           <polygon points="12 8 8 12 12 16 12 8"></polygon>
           <line x1="12" y1="16" x2="16" y2="12"></line>
@@ -363,25 +386,48 @@
         <span>Plan</span>
       </a>
       <a href="progress.html" class="mobile-nav-item active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <circle cx="12" cy="12" r="10"></circle>
           <polyline points="12 6 12 12 16 14"></polyline>
         </svg>
         <span>Active</span>
       </a>
       <a href="complete.html" class="mobile-nav-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
           <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
           <path d="M4 22h16"></path>
-          <path d="M10 14.66V17c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-2.34"></path>
+          <path
+            d="M10 14.66V17c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-2.34"
+          ></path>
           <path d="M14 14.66V17c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-2.34"></path>
           <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
         </svg>
         <span>Summary</span>
       </a>
       <a href="history.html" class="mobile-nav-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <path d="M12 20v-6M6 20V10M18 20V4"></path>
         </svg>
         <span>History</span>

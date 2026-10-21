@@ -10,6 +10,7 @@ import {
   setStorageItem,
 } from "./storage.js";
 import { Runner3D } from "./runner-3d.js";
+import { loadMap } from "./map.js";
 
 let workoutTimerInterval = null;
 let telemetryInterval = null;
@@ -100,6 +101,7 @@ export const initProgressScreen = function () {
       if (vizTitle) vizTitle.textContent = "Live route";
       if (vizSubtitle) vizSubtitle.textContent = "GPS breadcrumb tracking";
       if (runner3dInstance) runner3dInstance.pause();
+      loadMap();
     });
   }
 
