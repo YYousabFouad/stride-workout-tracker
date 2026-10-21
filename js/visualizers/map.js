@@ -43,6 +43,8 @@ export const loadMap = function () {
   }
 
   isLoading = true;
+  renderFallbackState(mapContainer, "Acquiring GPS signal...");
+
   navigator.geolocation.getCurrentPosition(
     function (position) {
       isLoading = false;
@@ -77,6 +79,11 @@ export const loadMap = function () {
         mapContainer,
         "Location access unavailable · Showing simulated grid"
       );
+    },
+    {
+      enableHighAccuracy: false,
+      timeout: 6000,
+      maximumAge: 60000,
     }
   );
 };

@@ -43,12 +43,16 @@ export class Runner3D {
     );
     this.applyCameraPreset("follow", false);
 
-    // 3. WebGL Renderer
-    this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true,
-      powerPreference: "high-performance",
-    });
+    // 3. WebGL Renderer (with fallback if high-performance context fails on mobile)
+    try {
+      this.renderer = new THREE.WebGLRenderer({
+        antialias: !this.isMobile,
+        alpha: true,
+        powerPreference: this.isMobile ? "default" : "high-performance",
+      });
+    } catch {
+      this.renderer = new THREE.WebGLRenderer({ alpha: true });
+    }
     this.renderer.setSize(width, height);
     // High DPR and realtime shadows can overwhelm mobile GPUs and stall the
     // main thread, which also makes the overlaid controls appear unresponsive.

@@ -80,6 +80,9 @@ export const initAccountModal = function () {
     setStorageItem(STORAGE_KEYS.USER, userProfile);
     syncAccountNavButton();
     closeModal();
+    document.dispatchEvent(
+      new CustomEvent("stride:account-created", { detail: userProfile })
+    );
   };
 
   if (form) {

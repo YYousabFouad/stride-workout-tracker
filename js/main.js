@@ -17,22 +17,22 @@ const bootstrap = async function () {
 
   // 2. Dynamically load only the controller for the active screen
   if (document.getElementById("view-plan")) {
-    const { initPlanWorkoutScreen } = await import("./screens/plan.js");
+    const { initPlanWorkoutScreen } = await import("./screens/plan.js?v=2");
     initPlanWorkoutScreen();
   }
 
   if (document.getElementById("view-progress")) {
-    const { initProgressScreen } = await import("./screens/progress.js");
+    const { initProgressScreen } = await import("./screens/progress.js?v=2");
     initProgressScreen();
   }
 
   if (document.getElementById("view-complete")) {
-    const { initCompleteScreen } = await import("./screens/complete.js");
+    const { initCompleteScreen } = await import("./screens/complete.js?v=2");
     initCompleteScreen();
   }
 
   if (document.getElementById("view-history")) {
-    const { initHistoryScreen } = await import("./screens/history.js");
+    const { initHistoryScreen } = await import("./screens/history.js?v=2");
     initHistoryScreen();
   }
 

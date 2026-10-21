@@ -181,6 +181,7 @@ const renderAccountModal = function () {
                 id="input-username"
                 class="form-input"
                 placeholder="e.g. Alex Runner"
+                required
               />
             </div>
 
@@ -191,6 +192,7 @@ const renderAccountModal = function () {
                 id="input-email"
                 class="form-input"
                 placeholder="alex@stride.app"
+                required
               />
             </div>
 
@@ -201,6 +203,8 @@ const renderAccountModal = function () {
                 id="input-password"
                 class="form-input"
                 placeholder="••••••••••••"
+                minlength="8"
+                required
               />
             </div>
           </div>

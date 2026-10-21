@@ -24,6 +24,7 @@ export const initCompleteScreen = function () {
   const timeVal = document.getElementById("complete-time-val");
   const saveWorkoutBtn = document.getElementById("btn-save-workout");
   const alertModal = document.getElementById("modal-alert");
+  const accountModal = document.getElementById("modal-account");
 
   if (workout) {
     if (distVal) distVal.textContent = workout.finalDistance || "0.0 km";
@@ -61,50 +62,69 @@ export const initCompleteScreen = function () {
     saveWorkoutBtn.innerHTML = `<span>Workout Saved! Streak: ${getStreakCount()} Days ✓</span>`;
   }
 
+  let waitingForAccount = false;
+
   // Save Workout & Update Streak
+  const saveWorkout = function () {
+    if (!saveWorkoutBtn || saveWorkoutBtn.disabled || (workout && workout.saved)) return;
+
+    if (workout) {
+      workout.saved = true;
+      setStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT, workout);
+      setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
+    }
+
+    const newStreak = incrementStreak();
+
+    const sport = workout ? workout.sport : SPORTS.RUN;
+    const distanceKm = workout ? Number(workout.distanceKm) || 0 : 0;
+    const elapsedSeconds = workout ? Number(workout.elapsedSeconds) || 0 : 0;
+    const fallbackEfficiency = calculateEfficiencyMetric(
+      distanceKm,
+      elapsedSeconds,
+      sport
+    );
+
+    const timeStr = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // Append to workout history
+    const historyList = getStorageItem(STORAGE_KEYS.HISTORY) || [];
+    const historyItem = {
+      id: workout?.id || `workout_${Date.now()}`,
+      title: workout ? `${workout.sportLabel} Session` : "Morning Run",
+      date: `Today · ${timeStr}`,
+      distance: workout ? workout.finalDistance || "0.0 km" : "0.0 km",
+      duration: workout ? workout.finalDuration || "00:00" : "00:00",
+      efficiencyValue: workout?.efficiencyValue || fallbackEfficiency.value,
+      efficiencyLabel: workout?.efficiencyLabel || fallbackEfficiency.label,
+      sport,
+    };
+    historyList.unshift(historyItem);
+    setStorageItem(STORAGE_KEYS.HISTORY, historyList);
+
+    saveWorkoutBtn.disabled = true;
+    saveWorkoutBtn.innerHTML = `<span>Workout Saved! Streak: ${newStreak} Days ✓</span>`;
+  };
+
   if (saveWorkoutBtn) {
     saveWorkoutBtn.addEventListener("click", function () {
       if (saveWorkoutBtn.disabled || (workout && workout.saved)) return;
 
-      if (workout) {
-        workout.saved = true;
-        setStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT, workout);
-        setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
+      if (!getStorageItem(STORAGE_KEYS.USER)) {
+        waitingForAccount = true;
+        if (accountModal) accountModal.classList.add("active");
+        return;
       }
-
-      const newStreak = incrementStreak();
-
-      const sport = workout ? workout.sport : SPORTS.RUN;
-      const distanceKm = workout ? Number(workout.distanceKm) || 0 : 0;
-      const elapsedSeconds = workout ? Number(workout.elapsedSeconds) || 0 : 0;
-      const fallbackEfficiency = calculateEfficiencyMetric(
-        distanceKm,
-        elapsedSeconds,
-        sport
-      );
-
-      const timeStr = new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-
-      // Append to workout history
-      const historyList = getStorageItem(STORAGE_KEYS.HISTORY) || [];
-      const historyItem = {
-        id: workout?.id || `workout_${Date.now()}`,
-        title: workout ? `${workout.sportLabel} Session` : "Morning Run",
-        date: `Today · ${timeStr}`,
-        distance: workout ? workout.finalDistance || "0.0 km" : "0.0 km",
-        duration: workout ? workout.finalDuration || "00:00" : "00:00",
-        efficiencyValue: workout?.efficiencyValue || fallbackEfficiency.value,
-        efficiencyLabel: workout?.efficiencyLabel || fallbackEfficiency.label,
-        sport,
-      };
-      historyList.unshift(historyItem);
-      setStorageItem(STORAGE_KEYS.HISTORY, historyList);
-
-      saveWorkoutBtn.disabled = true;
-      saveWorkoutBtn.innerHTML = `<span>Workout Saved! Streak: ${newStreak} Days ✓</span>`;
+      saveWorkout();
     });
   }
+
+  document.addEventListener("stride:account-created", function () {
+    if (!waitingForAccount) return;
+    waitingForAccount = false;
+    saveWorkout();
+  });
 };
