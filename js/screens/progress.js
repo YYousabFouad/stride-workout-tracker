@@ -12,8 +12,8 @@ import {
   formatTime,
   getStorageItem,
   setStorageItem,
-} from "./storage.js";
-import { Runner3D } from "./runner-3d.js";
+} from "../core/storage.js";
+import { Runner3D } from "../visualizers/runner-3d.js";
 
 let workoutTimerInterval = null;
 let telemetryInterval = null;
@@ -111,7 +111,7 @@ export const initProgressScreen = function () {
       if (vizSubtitle) vizSubtitle.textContent = "GPS breadcrumb tracking";
       if (runner3dInstance) runner3dInstance.pause(true);
 
-      const { loadMap } = await import("./map.js");
+      const { loadMap } = await import("../visualizers/map.js");
       loadMap();
     });
   }

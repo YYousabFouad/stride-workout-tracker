@@ -9,8 +9,8 @@ import {
   calculateEfficiencyMetric,
   getStorageItem,
   setStorageItem,
-} from "./storage.js";
-import { getStreakCount, incrementStreak, updateStreakDisplay } from "./streak.js";
+} from "../core/storage.js";
+import { getStreakCount, incrementStreak, updateStreakDisplay } from "../core/streak.js";
 
 export const initCompleteScreen = function () {
   const viewComplete = document.getElementById("view-complete");

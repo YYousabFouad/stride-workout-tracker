@@ -3,34 +3,36 @@
  * Orchestrates global shell controllers and dynamically loads screen-specific modules.
  */
 
-import { initNavigation } from "./navigation.js";
-import { updateStreakDisplay } from "./streak.js";
-import { initAccountModal } from "./modal.js";
+import { initAppShell } from "./ui/shell.js";
+import { initNavigation } from "./ui/navigation.js";
+import { updateStreakDisplay } from "./core/streak.js";
+import { initAccountModal } from "./ui/modal.js";
 
 const bootstrap = async function () {
-  // 1. Initialize lightweight global shell controllers
+  // 1. Initialize shared layout shell & lightweight global controllers
+  initAppShell();
   initNavigation();
   updateStreakDisplay();
   initAccountModal();
 
   // 2. Dynamically load only the controller for the active screen
   if (document.getElementById("view-plan")) {
-    const { initPlanWorkoutScreen } = await import("./plan.js");
+    const { initPlanWorkoutScreen } = await import("./screens/plan.js");
     initPlanWorkoutScreen();
   }
 
   if (document.getElementById("view-progress")) {
-    const { initProgressScreen } = await import("./progress.js");
+    const { initProgressScreen } = await import("./screens/progress.js");
     initProgressScreen();
   }
 
   if (document.getElementById("view-complete")) {
-    const { initCompleteScreen } = await import("./complete.js");
+    const { initCompleteScreen } = await import("./screens/complete.js");
     initCompleteScreen();
   }
 
   if (document.getElementById("view-history")) {
-    const { initHistoryScreen } = await import("./history.js");
+    const { initHistoryScreen } = await import("./screens/history.js");
     initHistoryScreen();
   }
 

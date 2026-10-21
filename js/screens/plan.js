@@ -9,7 +9,7 @@ import {
   STORAGE_KEYS,
   sanitizeTarget,
   setStorageItem,
-} from "./storage.js";
+} from "../core/storage.js";
 
 export const initPlanWorkoutScreen = function () {
   const workoutForm = document.querySelector(".workout-form");

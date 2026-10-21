@@ -52,18 +52,23 @@ stride-workout-tracker/
 │   ├── modal.css              # Modal dialogs, backdrop animations, and forms
 │   └── styles.css             # Main stylesheet entrypoint aggregating layers
 │
-├── js/                        # Modular Native JavaScript (ES Modules)
+├── js/                        # Layered Native JavaScript (ES Modules)
+│   ├── core/                  # Domain Logic & Persistence Layer
+│   │   ├── storage.js         # LocalStorage helpers, domain constants, and sanitizers
+│   │   └── streak.js          # Streak counter and UI badge synchronization
+│   ├── ui/                    # Global Shell & Shared UI Layer
+│   │   ├── shell.js           # Single-source navbar, mobile nav, and modal hydration
+│   │   ├── navigation.js      # Screen switcher and client-side routing
+│   │   └── modal.js           # Account modal controller and event listeners
+│   ├── screens/               # Lazy-Loaded Screen Controllers
+│   │   ├── plan.js            # Plan workout screen form controller
+│   │   ├── progress.js        # Active workout timer loop and metrics tracker
+│   │   ├── complete.js        # Summary card controller and idempotent save handlers
+│   │   └── history.js         # Historical workout renderer
+│   ├── visualizers/           # On-Demand 3D & Map Engines
+│   │   ├── runner-3d.js       # Three.js 3D runner, kinematics, Vanta wave mesh
+│   │   └── map.js             # Leaflet GPS route map & graceful offline fallback
 │   ├── vendor/                # Vendored libraries (Three.js v128, Anime.js v3.2.2)
-│   ├── runner-3d.js           # Three.js 3D runner, kinematics, Vanta wave mesh
-│   ├── map.js                 # Leaflet GPS route map & graceful offline fallback
-│   ├── storage.js             # LocalStorage helpers, domain constants, and sanitizers
-│   ├── navigation.js          # Screen switcher and client-side routing
-│   ├── streak.js              # Streak counter and UI badge synchronization
-│   ├── modal.js               # Account modal controller and event listeners
-│   ├── plan.js                # Plan workout screen form controller (lazy-loaded)
-│   ├── progress.js            # Active workout timer loop and metrics tracker (lazy-loaded)
-│   ├── complete.js            # Summary card controller and idempotent save handlers (lazy-loaded)
-│   ├── history.js             # Historical workout renderer (lazy-loaded)
 │   └── main.js                # Main application entrypoint & dynamic module bootstrapper
 └── README.md                  # Architecture & usage documentation
 ```

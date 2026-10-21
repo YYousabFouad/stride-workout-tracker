@@ -3,7 +3,7 @@
  * Loads saved workouts from localStorage and dynamically renders historical entries.
  */
 
-import { SPORTS, STORAGE_KEYS, getStorageItem } from "./storage.js";
+import { SPORTS, STORAGE_KEYS, getStorageItem } from "../core/storage.js";
 
 export const initHistoryScreen = function () {
   const viewHistory = document.getElementById("view-history");

@@ -3,7 +3,7 @@
  * Manages modal dialogues, backdrop clicks, Escape key, and account creation.
  */
 
-import { STORAGE_KEYS, getStorageItem, setStorageItem } from "./storage.js";
+import { STORAGE_KEYS, getStorageItem, setStorageItem } from "../core/storage.js";
 
 export const initAccountModal = function () {
   const modal = document.getElementById("modal-account");
