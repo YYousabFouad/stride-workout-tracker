@@ -53,6 +53,31 @@ export const formatDistance = function (distanceKm) {
 };
 
 /**
+ * Calculate the Haversine distance in kilometers between two [lat, lng] coordinates
+ * @param {[number, number]} coordA
+ * @param {[number, number]} coordB
+ * @returns {number}
+ */
+export const calculateHaversineKm = function (coordA, coordB) {
+  if (!Array.isArray(coordA) || !Array.isArray(coordB)) return 0;
+  const [lat1, lon1] = coordA;
+  const [lat2, lon2] = coordB;
+  const R = 6371; // Earth radius in km
+  const toRad = (deg) => (deg * Math.PI) / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+/**
  * Calculate sport-appropriate efficiency metric (Pace /km for running, Speed km/h for riding)
  * @param {number} distanceKm
  * @param {number} elapsedSeconds

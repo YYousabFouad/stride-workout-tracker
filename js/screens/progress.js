@@ -14,6 +14,12 @@ import {
   setStorageItem,
 } from "../core/storage.js";
 import { Runner3D } from "../visualizers/runner-3d.js?v=2";
+import {
+  getRouteData,
+  loadMap,
+  startRouteTracking,
+  stopRouteTracking,
+} from "../visualizers/map.js?v=2";
 
 let workoutTimerInterval = null;
 let telemetryInterval = null;
@@ -110,8 +116,6 @@ export const initProgressScreen = function () {
       if (vizTitle) vizTitle.textContent = "Live route";
       if (vizSubtitle) vizSubtitle.textContent = "GPS breadcrumb tracking";
       if (runner3dInstance) runner3dInstance.pause(true);
-
-      const { loadMap } = await import("../visualizers/map.js?v=2");
       loadMap();
     });
   }
@@ -179,13 +183,30 @@ export const initProgressScreen = function () {
 
   const targetValue = Number(workout.targetValue) || (isTimeGoal ? 30 : 5.0);
   const targetSeconds = isTimeGoal ? targetValue * 60 : 0;
+  let gpsDistanceKm = Number(workout.gpsDistanceKm) || 0;
+  let goalReachedStopped = false;
+
+  // Start continuous GPS location & route polyline tracking
+  startRouteTracking({
+    initialCoords: workout.routeCoords || [],
+    initialDistanceKm: gpsDistanceKm,
+    onUpdate: ({ coords, distanceKm }) => {
+      gpsDistanceKm = distanceKm;
+      workout.routeCoords = coords;
+      workout.gpsDistanceKm = Number(distanceKm.toFixed(3));
+      setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
+      updateWorkoutLoop();
+    },
+  });
 
   const computeLiveMetrics = function () {
     const elapsedSeconds = Math.max(
       0,
       Math.floor((Date.now() - workout.startTime) / 1000)
     );
-    const distanceKm = (elapsedSeconds / 3600) * baseSpeed;
+    const simulatedDistanceKm = (elapsedSeconds / 3600) * baseSpeed;
+    const distanceKm =
+      gpsDistanceKm > 0 ? gpsDistanceKm : simulatedDistanceKm;
     const rawPercent = isTimeGoal
       ? (elapsedSeconds / targetSeconds) * 100
       : (distanceKm / targetValue) * 100;
@@ -194,7 +215,7 @@ export const initProgressScreen = function () {
     return { elapsedSeconds, distanceKm, percent };
   };
 
-  const updateWorkoutLoop = function () {
+  function updateWorkoutLoop() {
     const { elapsedSeconds, distanceKm, percent } = computeLiveMetrics();
 
     if (liveTime) liveTime.textContent = formatTime(elapsedSeconds);
@@ -202,10 +223,16 @@ export const initProgressScreen = function () {
     if (progressPercent) progressPercent.textContent = `${percent}%`;
     if (progressBar) progressBar.style.width = `${percent}%`;
 
-    if (percent >= 100 && targetHint) {
-      targetHint.textContent = `Target reached! You completed ${workout.targetValue} ${workout.targetUnit} 🎉`;
+    if (percent >= 100) {
+      if (!goalReachedStopped) {
+        goalReachedStopped = true;
+        stopRouteTracking();
+      }
+      if (targetHint) {
+        targetHint.textContent = `Target reached! You completed ${workout.targetValue} ${workout.targetUnit} 🎉`;
+      }
     }
-  };
+  }
 
   updateWorkoutLoop();
   workoutTimerInterval = setInterval(updateWorkoutLoop, 1000);
@@ -221,12 +248,14 @@ export const initProgressScreen = function () {
         clearInterval(telemetryInterval);
         telemetryInterval = null;
       }
+      stopRouteTracking();
       if (runner3dInstance) {
         runner3dInstance.destroy();
         runner3dInstance = null;
       }
 
       const { elapsedSeconds, distanceKm, percent } = computeLiveMetrics();
+      const { coords } = getRouteData();
       const efficiency = calculateEfficiencyMetric(
         distanceKm,
         elapsedSeconds,
@@ -236,6 +265,7 @@ export const initProgressScreen = function () {
       workout.endTime = Date.now();
       workout.elapsedSeconds = elapsedSeconds;
       workout.distanceKm = Number(distanceKm.toFixed(2));
+      workout.routeCoords = coords;
       workout.finalDuration = formatTime(elapsedSeconds);
       workout.finalDistance = formatDistance(distanceKm);
       workout.efficiencyValue = efficiency.value;
@@ -249,10 +279,11 @@ export const initProgressScreen = function () {
     });
   }
 
-  // Cleanup on unload to prevent WebGL context leaks
+  // Cleanup on unload to prevent WebGL context and geolocation watcher leaks
   window.addEventListener("beforeunload", () => {
     if (workoutTimerInterval) clearInterval(workoutTimerInterval);
     if (telemetryInterval) clearInterval(telemetryInterval);
+    stopRouteTracking();
     if (runner3dInstance) {
       runner3dInstance.destroy();
       runner3dInstance = null;

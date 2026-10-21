@@ -29,6 +29,52 @@ export const initCompleteScreen = function () {
   if (workout) {
     if (distVal) distVal.textContent = workout.finalDistance || "0.0 km";
     if (timeVal) timeVal.textContent = workout.finalDuration || "00:00";
+
+    const completeMapViewport = document.getElementById("complete-map-viewport");
+    if (
+      completeMapViewport &&
+      typeof L !== "undefined" &&
+      Array.isArray(workout.routeCoords) &&
+      workout.routeCoords.length > 0
+    ) {
+      completeMapViewport.innerHTML = "";
+      const summaryMap = L.map("complete-map-viewport").setView(
+        workout.routeCoords[0],
+        15
+      );
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(summaryMap);
+
+      const polyline = L.polyline(workout.routeCoords, {
+        color: "#bbf448",
+        weight: 5,
+        opacity: 0.95,
+      }).addTo(summaryMap);
+
+      L.circleMarker(workout.routeCoords[0], {
+        radius: 6,
+        color: "#060d0c",
+        weight: 2,
+        fillColor: "#bbf448",
+        fillOpacity: 1,
+      }).addTo(summaryMap);
+
+      const endCoord = workout.routeCoords[workout.routeCoords.length - 1];
+      L.circleMarker(endCoord, {
+        radius: 7,
+        color: "#060d0c",
+        weight: 2,
+        fillColor: "#00d9f5",
+        fillOpacity: 1,
+      }).addTo(summaryMap);
+
+      if (workout.routeCoords.length > 1) {
+        summaryMap.fitBounds(polyline.getBounds(), { padding: [32, 32] });
+      }
+      setTimeout(() => summaryMap.invalidateSize(), 100);
+    }
   }
 
   updateStreakDisplay();
