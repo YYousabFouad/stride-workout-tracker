@@ -7,6 +7,7 @@ import {
   GOAL_TYPES,
   SPORTS,
   STORAGE_KEYS,
+  getStorageItem,
   sanitizeTarget,
   setStorageItem,
 } from "../core/storage.js";
@@ -15,6 +16,7 @@ export const initPlanWorkoutScreen = function () {
   const workoutForm = document.querySelector(".workout-form");
   const targetInput = document.getElementById("target-input");
   const targetUnitLabel = document.getElementById("target-unit-label");
+  const accountModal = document.getElementById("modal-account");
 
   if (!workoutForm || !targetInput) return;
 
@@ -46,6 +48,8 @@ export const initPlanWorkoutScreen = function () {
     clickedBtn.classList.add("active");
     updateGoalType(clickedBtn);
   };
+
+  let waitingForAccount = false;
 
   const handleStartWorkout = function () {
     const activeSportBtn = workoutForm.querySelector(
@@ -87,6 +91,23 @@ export const initPlanWorkoutScreen = function () {
 
   workoutForm.addEventListener("submit", function (e) {
     e.preventDefault();
+
+    if (getStorageItem(STORAGE_KEYS.USER)) {
+      handleStartWorkout();
+      return;
+    }
+
+    waitingForAccount = true;
+    if (accountModal) accountModal.classList.add("active");
+  });
+
+  document.addEventListener("stride:account-created", function () {
+    if (!waitingForAccount) return;
+    waitingForAccount = false;
     handleStartWorkout();
+  });
+
+  document.addEventListener("stride:account-cancelled", function () {
+    waitingForAccount = false;
   });
 };

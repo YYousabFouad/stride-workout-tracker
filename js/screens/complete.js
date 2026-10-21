@@ -197,4 +197,8 @@ export const initCompleteScreen = function () {
     waitingForAccount = false;
     saveWorkout();
   });
+
+  document.addEventListener("stride:account-cancelled", function () {
+    waitingForAccount = false;
+  });
 };

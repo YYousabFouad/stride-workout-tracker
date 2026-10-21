@@ -24,8 +24,11 @@ export const initAccountModal = function () {
 
   syncAccountNavButton();
 
-  const closeModal = function () {
+  const closeModal = function (accountCreated = false) {
     modal.classList.remove("active");
+    if (!accountCreated) {
+      document.dispatchEvent(new CustomEvent("stride:account-cancelled"));
+    }
   };
 
   const openModal = function () {
@@ -60,6 +63,9 @@ export const initAccountModal = function () {
     if (e.key !== "Escape") return;
     document.querySelectorAll(".modal-overlay.active").forEach((activeModal) => {
       activeModal.classList.remove("active");
+      if (activeModal.id === "modal-account") {
+        document.dispatchEvent(new CustomEvent("stride:account-cancelled"));
+      }
     });
   });
 
@@ -79,7 +85,7 @@ export const initAccountModal = function () {
 
     setStorageItem(STORAGE_KEYS.USER, userProfile);
     syncAccountNavButton();
-    closeModal();
+    closeModal(true);
     document.dispatchEvent(
       new CustomEvent("stride:account-created", { detail: userProfile })
     );

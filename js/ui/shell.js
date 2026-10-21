@@ -128,7 +128,7 @@ const renderAccountModal = function () {
           <div class="modal-title-group">
             <h3 class="modal-title">Create Account</h3>
             <p class="modal-subtitle">
-              Save workout to LocalStorage & increase streak
+              Create an account to start and save workouts
             </p>
           </div>
           <button type="button" class="modal-close-btn" aria-label="Close">
