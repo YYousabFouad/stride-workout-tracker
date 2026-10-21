@@ -50,13 +50,31 @@ export class Runner3D {
       powerPreference: "high-performance",
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
+    // High DPR and realtime shadows can overwhelm mobile GPUs and stall the
+    // main thread, which also makes the overlaid controls appear unresponsive.
+    this.renderer.setPixelRatio(
+      Math.min(window.devicePixelRatio || 1, this.isMobile ? 1.25 : 2)
+    );
+    this.renderer.shadowMap.enabled = !this.isMobile;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // Clean any existing canvas
     this.container.querySelectorAll("canvas").forEach((c) => c.remove());
     this.container.appendChild(this.renderer.domElement);
+    this.renderer.domElement.setAttribute("aria-hidden", "true");
+
+    // Browsers may discard a WebGL context when a phone is backgrounded or
+    // under memory pressure. Restart the loop when the context is restored.
+    this.onContextLost = (event) => {
+      event.preventDefault();
+      this.pause();
+    };
+    this.onContextRestored = () => {
+      this.resize();
+      if (!this.manuallyPaused) this.start();
+    };
+    this.renderer.domElement.addEventListener("webglcontextlost", this.onContextLost);
+    this.renderer.domElement.addEventListener("webglcontextrestored", this.onContextRestored);
 
     // 4. Lighting System
     this.setupLighting();
@@ -81,6 +99,7 @@ export class Runner3D {
 
     // 10. Battery & Thermal Optimization (Pause when off-screen on mobile)
     this.setupVisibilityObserver();
+    this.setupPageVisibility();
 
     // Auto-start rendering loop
     this.start();
@@ -451,6 +470,10 @@ export class Runner3D {
       this.camera.fov = this.isMobile ? 54 : 46;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(width, height);
+      this.renderer.setPixelRatio(
+        Math.min(window.devicePixelRatio || 1, this.isMobile ? 1.25 : 2)
+      );
+      this.renderer.shadowMap.enabled = !this.isMobile;
     }
   }
 
@@ -480,6 +503,17 @@ export class Runner3D {
       { threshold: 0.1 }
     );
     this.visibilityObserver.observe(this.container);
+  }
+
+  setupPageVisibility() {
+    this.onPageVisibilityChange = () => {
+      if (document.hidden) {
+        if (this.isRunning) this.pause();
+      } else if (!this.manuallyPaused) {
+        this.start();
+      }
+    };
+    document.addEventListener("visibilitychange", this.onPageVisibilityChange);
   }
 
   applyCameraPreset(mode, animated = true) {
@@ -704,6 +738,9 @@ export class Runner3D {
     if (this.visibilityObserver) {
       this.visibilityObserver.disconnect();
     }
+    if (this.onPageVisibilityChange) {
+      document.removeEventListener("visibilitychange", this.onPageVisibilityChange);
+    }
     if (this.scene) {
       this.scene.traverse((obj) => {
         if (obj.geometry) {
@@ -719,6 +756,8 @@ export class Runner3D {
       });
     }
     if (this.renderer && this.renderer.domElement) {
+      this.renderer.domElement.removeEventListener("webglcontextlost", this.onContextLost);
+      this.renderer.domElement.removeEventListener("webglcontextrestored", this.onContextRestored);
       this.renderer.domElement.remove();
       this.renderer.dispose();
     }
