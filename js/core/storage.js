@@ -9,6 +9,7 @@ export const STORAGE_KEYS = {
   HISTORY: "stride_history",
   STREAK: "stride_streak",
   USER: "stride_user",
+  LAST_LOCATION: "stride_last_location",
 };
 
 export const SPORTS = {

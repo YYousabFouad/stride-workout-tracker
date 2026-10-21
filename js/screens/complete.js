@@ -38,11 +38,11 @@ export const initCompleteScreen = function () {
       workout.routeCoords.length > 0
     ) {
       completeMapViewport.innerHTML = "";
-      const summaryMap = L.map("complete-map-viewport").setView(
-        workout.routeCoords[0],
-        15
-      );
+      const summaryMap = L.map("complete-map-viewport", {
+        preferCanvas: true,
+      }).setView(workout.routeCoords[0], 15);
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(summaryMap);

@@ -2,9 +2,15 @@
  * Stride Workout Tracker — GPS Route Map & Live Path Tracker
  * Tracks live geolocation via watchPosition, draws a glowing route polyline,
  * and pans the map with the athlete until the workout goal is reached.
+ * Optimized for instant mobile rendering via two-tier geolocation & fast edge CDN tiles.
  */
 
-import { calculateHaversineKm } from "../core/storage.js";
+import {
+  STORAGE_KEYS,
+  calculateHaversineKm,
+  getStorageItem,
+  setStorageItem,
+} from "../core/storage.js";
 
 let map = null;
 let watchId = null;
@@ -16,7 +22,42 @@ let totalTrackedDistanceKm = 0;
 let isTrackingStopped = false;
 let onRouteUpdateCallback = null;
 
+const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const OSM_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const DEFAULT_FALLBACK_COORDS = [40.7128, -74.006]; // Sensible default if no GPS or stored position yet
 const MIN_STEP_DISTANCE_KM = 0.003; // 3m jitter filter
+
+const getStoredLocation = function () {
+  if (routeCoords.length > 0) {
+    return routeCoords[routeCoords.length - 1];
+  }
+  const lastLoc = getStorageItem(STORAGE_KEYS.LAST_LOCATION);
+  if (Array.isArray(lastLoc) && lastLoc.length === 2) {
+    return lastLoc;
+  }
+  const activeWorkout = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
+  if (
+    Array.isArray(activeWorkout?.routeCoords) &&
+    activeWorkout.routeCoords.length > 0
+  ) {
+    return activeWorkout.routeCoords[activeWorkout.routeCoords.length - 1];
+  }
+  return DEFAULT_FALLBACK_COORDS;
+};
+
+const updateGpsStatusBadge = function (isActive, message) {
+  const badge = document.getElementById("map-gps-badge");
+  const text = document.getElementById("map-gps-status");
+  if (badge && text) {
+    if (isActive) {
+      badge.classList.add("active");
+    } else {
+      badge.classList.remove("active");
+    }
+    text.textContent = message;
+  }
+};
 
 const renderFallbackState = function (container, message) {
   if (map) return;
@@ -36,24 +77,24 @@ const ensureMapInitialized = function (initialCoords) {
   if (!mapContainer || typeof L === "undefined") return null;
 
   if (!map) {
-    mapContainer.innerHTML = "";
-    map = L.map("map-viewport").setView(initialCoords, 16);
+    mapContainer.innerHTML = `
+      <div class="map-hud-top">
+        <div class="gps-badge ${routeCoords.length > 0 ? "active" : ""}" id="map-gps-badge">
+          <span class="gps-indicator-dot"></span>
+          <span id="map-gps-status">${routeCoords.length > 0 ? "Live GPS Active" : "Acquiring GPS signal..."}</span>
+        </div>
+      </div>
+    `;
 
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    map = L.map("map-viewport", {
+      zoomControl: true,
+      preferCanvas: true,
+    }).setView(initialCoords, 16);
+
+    L.tileLayer(OSM_TILES, {
+      maxZoom: 19,
+      attribution: OSM_ATTRIBUTION,
     }).addTo(map);
-
-    // Origin marker
-    originMarker = L.circleMarker(initialCoords, {
-      radius: 6,
-      color: "#060d0c",
-      weight: 2,
-      fillColor: "#bbf448",
-      fillOpacity: 1,
-    })
-      .addTo(map)
-      .bindPopup("Workout Start");
 
     // Live route polyline
     routePolyline = L.polyline(routeCoords, {
@@ -64,17 +105,34 @@ const ensureMapInitialized = function (initialCoords) {
       lineJoin: "round",
     }).addTo(map);
 
-    // Live moving athlete marker
-    currentMarker = L.circleMarker(initialCoords, {
-      radius: 8,
-      color: "#060d0c",
-      weight: 3,
-      fillColor: "#00d9f5",
-      fillOpacity: 1,
-    })
-      .addTo(map)
-      .bindPopup("Live GPS Position · Active Route");
+    // If we already have route coordinates (e.g. resuming workout), render markers
+    if (routeCoords.length > 0) {
+      originMarker = L.circleMarker(routeCoords[0], {
+        radius: 6,
+        color: "#060d0c",
+        weight: 2,
+        fillColor: "#bbf448",
+        fillOpacity: 1,
+      })
+        .addTo(map)
+        .bindPopup("Workout Start");
 
+      const currentPos = routeCoords[routeCoords.length - 1];
+      currentMarker = L.circleMarker(currentPos, {
+        radius: 8,
+        color: "#060d0c",
+        weight: 3,
+        fillColor: "#00d9f5",
+        fillOpacity: 1,
+      })
+        .addTo(map)
+        .bindPopup("Live GPS Position · Active Route");
+    }
+
+    // Immediately trigger layout recalculation
+    requestAnimationFrame(() => {
+      if (map) map.invalidateSize();
+    });
     setTimeout(() => {
       if (map) map.invalidateSize();
     }, 100);
@@ -86,9 +144,38 @@ const ensureMapInitialized = function (initialCoords) {
 const recordCoordinate = function (coords) {
   if (isTrackingStopped) return;
 
+  setStorageItem(STORAGE_KEYS.LAST_LOCATION, coords);
+  updateGpsStatusBadge(true, "Live GPS Active");
+
   if (routeCoords.length === 0) {
     routeCoords.push(coords);
-    ensureMapInitialized(coords);
+    if (map) {
+      if (!originMarker) {
+        originMarker = L.circleMarker(coords, {
+          radius: 6,
+          color: "#060d0c",
+          weight: 2,
+          fillColor: "#bbf448",
+          fillOpacity: 1,
+        })
+          .addTo(map)
+          .bindPopup("Workout Start");
+      }
+      if (!currentMarker) {
+        currentMarker = L.circleMarker(coords, {
+          radius: 8,
+          color: "#060d0c",
+          weight: 3,
+          fillColor: "#00d9f5",
+          fillOpacity: 1,
+        })
+          .addTo(map)
+          .bindPopup("Live GPS Position · Active Route");
+      }
+      map.setView(coords, 16, { animate: true });
+    } else {
+      ensureMapInitialized(coords);
+    }
   } else {
     const prev = routeCoords[routeCoords.length - 1];
     const stepKm = calculateHaversineKm(prev, coords);
@@ -107,8 +194,6 @@ const recordCoordinate = function (coords) {
       currentMarker.setLatLng(coords);
     }
     map.panTo(coords, { animate: true, duration: 0.5 });
-  } else {
-    ensureMapInitialized(coords);
   }
 
   if (typeof onRouteUpdateCallback === "function") {
@@ -132,6 +217,31 @@ export const startRouteTracking = function (options = {}) {
   }
 
   if (!navigator.geolocation) return;
+
+  // Tier 1: Fast coarse location (< 300ms) to snap map immediately on mobile
+  if (routeCoords.length === 0) {
+    navigator.geolocation.getCurrentPosition(
+      function (position) {
+        if (routeCoords.length === 0) {
+          const { latitude, longitude } = position.coords;
+          setStorageItem(STORAGE_KEYS.LAST_LOCATION, [latitude, longitude]);
+          if (map) {
+            map.setView([latitude, longitude], 16, { animate: true });
+          }
+        }
+      },
+      function () {
+        // Silently ignore coarse fallback error; high accuracy watcher handles location
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 300000,
+        timeout: 3000,
+      }
+    );
+  }
+
+  // Tier 2: Continuous precision GPS tracking
   if (watchId !== null) return;
 
   watchId = navigator.geolocation.watchPosition(
@@ -141,17 +251,19 @@ export const startRouteTracking = function (options = {}) {
     },
     function () {
       const mapContainer = document.getElementById("map-viewport");
-      if (mapContainer && !map) {
+      if (!map && mapContainer) {
         renderFallbackState(
           mapContainer,
           "Location access unavailable · Showing simulated grid"
         );
+      } else {
+        updateGpsStatusBadge(false, "GPS signal lost · Retrying...");
       }
     },
     {
       enableHighAccuracy: true,
       timeout: 10000,
-      maximumAge: 0,
+      maximumAge: 5000,
     }
   );
 };
@@ -178,33 +290,33 @@ export const loadMap = function () {
   const mapContainer = document.getElementById("map-viewport");
   if (!mapContainer) return;
 
-  if (map) {
-    setTimeout(() => {
-      map.invalidateSize();
-      if (routeCoords.length > 0) {
-        map.panTo(routeCoords[routeCoords.length - 1]);
-      }
-    }, 100);
-    return;
-  }
-
   if (typeof L === "undefined") {
     renderFallbackState(mapContainer, "Map library unavailable offline");
     return;
   }
 
-  if (routeCoords.length > 0) {
-    ensureMapInitialized(routeCoords[routeCoords.length - 1]);
-    return;
+  // Optimistically mount map immediately using last known or coarse location
+  const initialCoords = getStoredLocation();
+  if (!map) {
+    ensureMapInitialized(initialCoords);
   }
 
-  if (!navigator.geolocation) {
-    renderFallbackState(mapContainer, "Geolocation not supported by browser");
-    return;
-  }
+  requestAnimationFrame(() => {
+    if (map) {
+      map.invalidateSize();
+      if (routeCoords.length > 0) {
+        map.panTo(routeCoords[routeCoords.length - 1], { animate: false });
+      }
+    }
+  });
 
-  renderFallbackState(mapContainer, "Acquiring GPS signal...");
-  startRouteTracking({ onUpdate: onRouteUpdateCallback });
+  setTimeout(() => {
+    if (map) map.invalidateSize();
+  }, 100);
+
+  if (watchId === null && !isTrackingStopped) {
+    startRouteTracking({ onUpdate: onRouteUpdateCallback });
+  }
 };
 
 export const initMap = loadMap;
