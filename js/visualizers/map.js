@@ -29,6 +29,10 @@ let navGuideCasingPolyline = null;
 let isNavigatingToArrow = false;
 let activeOsrmAbortController = null;
 let navToastTimeout = null;
+let lastRecordedGpsTime = 0;
+let lastRecordedGpsCoord = null;
+let currentGpsSpeedKmh = 0;
+let stationaryWatchdogTimer = null;
 
 const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const OSM_ATTRIBUTION =
@@ -954,13 +958,65 @@ const ensureMapInitialized = function (initialCoords) {
   return map;
 };
 
-const recordCoordinate = function (coords, accuracy = 0) {
+const recordCoordinate = function (
+  coords,
+  accuracy = 0,
+  nativeSpeed = null,
+  timestamp = Date.now()
+) {
   if (isTrackingStopped) return;
 
   // Filter out wild satellite multipath spikes if accuracy is poor
   if (accuracy > MAX_ACCEPTABLE_ACCURACY_M && routeCoords.length > 0) {
     return;
   }
+
+  const now = timestamp || Date.now();
+  let measuredSpeed = 0;
+
+  if (
+    typeof nativeSpeed === "number" &&
+    !isNaN(nativeSpeed) &&
+    nativeSpeed >= 0
+  ) {
+    // W3C Geolocation API coords.speed is in m/s; convert to km/h
+    measuredSpeed = nativeSpeed * 3.6;
+  } else if (lastRecordedGpsCoord && lastRecordedGpsTime > 0) {
+    const dtSeconds = (now - lastRecordedGpsTime) / 1000;
+    const stepKm = calculateHaversineKm(lastRecordedGpsCoord, coords);
+    if (dtSeconds >= 0.5 && dtSeconds <= 12 && stepKm < 0.25) {
+      measuredSpeed = (stepKm / dtSeconds) * 3600;
+    }
+  }
+
+  // Deadband threshold: stationary GPS jitter under 0.9 km/h is treated as stopped
+  if (measuredSpeed < 0.9) {
+    measuredSpeed = 0;
+  } else {
+    measuredSpeed =
+      currentGpsSpeedKmh > 0
+        ? currentGpsSpeedKmh * 0.35 + measuredSpeed * 0.65
+        : measuredSpeed;
+  }
+
+  currentGpsSpeedKmh = Number(measuredSpeed.toFixed(1));
+  lastRecordedGpsCoord = coords;
+  lastRecordedGpsTime = now;
+
+  // Stationary watchdog timer: if no new GPS motion occurs for 3.5s, report stopped
+  if (stationaryWatchdogTimer) clearTimeout(stationaryWatchdogTimer);
+  stationaryWatchdogTimer = setTimeout(() => {
+    currentGpsSpeedKmh = 0;
+    if (typeof onRouteUpdateCallback === "function" && !isTrackingStopped) {
+      onRouteUpdateCallback({
+        coords: [...routeCoords],
+        distanceKm: totalTrackedDistanceKm,
+        currentPosition: coords,
+        speedKmh: 0,
+        isMoving: false,
+      });
+    }
+  }, 3500);
 
   setStorageItem(STORAGE_KEYS.LAST_LOCATION, coords);
   updateGpsStatusBadge(true, "Live GPS Active");
@@ -1035,6 +1091,8 @@ const recordCoordinate = function (coords, accuracy = 0) {
       coords: [...routeCoords],
       distanceKm: totalTrackedDistanceKm,
       currentPosition: coords,
+      speedKmh: currentGpsSpeedKmh,
+      isMoving: currentGpsSpeedKmh >= 0.9,
     });
   }
 
@@ -1137,8 +1195,9 @@ export const startRouteTracking = function (options = {}) {
 
   watchId = navigator.geolocation.watchPosition(
     function (position) {
-      const { latitude, longitude, accuracy } = position.coords;
-      recordCoordinate([latitude, longitude], accuracy);
+      const { latitude, longitude, accuracy, speed } = position.coords;
+      const timestamp = position.timestamp || Date.now();
+      recordCoordinate([latitude, longitude], accuracy, speed, timestamp);
     },
     function () {
       const mapContainer = document.getElementById("map-viewport");
@@ -1161,6 +1220,13 @@ export const startRouteTracking = function (options = {}) {
 
 export const stopRouteTracking = function () {
   isTrackingStopped = true;
+  if (stationaryWatchdogTimer) {
+    clearTimeout(stationaryWatchdogTimer);
+    stationaryWatchdogTimer = null;
+  }
+  currentGpsSpeedKmh = 0;
+  lastRecordedGpsCoord = null;
+  lastRecordedGpsTime = 0;
   if (watchId !== null && navigator.geolocation) {
     navigator.geolocation.clearWatch(watchId);
     watchId = null;

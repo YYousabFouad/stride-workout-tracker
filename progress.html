@@ -147,11 +147,23 @@
               <!-- Top HUD Overlay -->
               <div class="runner-hud-top">
                 <div class="runner-hud-pill">
-                  <span class="runner-hud-dot"></span>
-                  <span id="runner-hud-cadence">165 SPM</span>
+                  <span class="runner-hud-dot" id="runner-motion-indicator"></span>
+                  <span id="runner-motion-status">RUNNING</span>
                   <span style="opacity: 0.4">|</span>
-                  <span id="runner-hud-speed">11.2 km/h</span>
+                  <span id="runner-hud-cadence">166 SPM</span>
+                  <span style="opacity: 0.4">|</span>
+                  <span id="runner-hud-speed">11.4 km/h</span>
                 </div>
+                <button
+                  type="button"
+                  class="runner-motion-btn"
+                  id="btn-toggle-motion"
+                  title="Toggle Motion: Run / Stop (Spacebar)"
+                  aria-label="Toggle Movement"
+                >
+                  <span id="btn-motion-icon">⏸️</span>
+                  <span id="btn-motion-label">Stop</span>
+                </button>
               </div>
 
               <!-- Bottom Camera Preset Controls -->

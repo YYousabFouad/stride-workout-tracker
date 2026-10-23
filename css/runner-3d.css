@@ -120,6 +120,49 @@
   animation: liveDot 1.4s infinite;
 }
 
+.runner-hud-dot.stopped {
+  background-color: #ffb800;
+  box-shadow: 0 0 8px rgba(255, 184, 0, 0.6);
+  animation: none;
+}
+
+.runner-motion-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background-color: rgba(10, 18, 16, 0.88);
+  border: 1px solid rgba(0, 240, 181, 0.35);
+  backdrop-filter: blur(10px);
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family-sans);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: all var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.runner-motion-btn:hover {
+  background-color: rgba(0, 240, 181, 0.15);
+  border-color: var(--color-brand-primary);
+  transform: translateY(-1px);
+}
+
+.runner-motion-btn.is-stopped {
+  border-color: rgba(255, 184, 0, 0.45);
+  color: #ffb800;
+}
+
+.runner-motion-btn.is-stopped:hover {
+  background-color: rgba(255, 184, 0, 0.15);
+  border-color: #ffb800;
+}
+
 
 .runner-hud-bottom {
   position: absolute;
@@ -261,5 +304,22 @@
   .runner-3d-viewport {
     min-height: 330px;
     height: 330px;
+  }
+
+  .runner-hud-top {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .runner-hud-pill {
+    padding: 4px 10px;
+    font-size: 10px;
+    gap: 5px;
+  }
+
+  .runner-motion-btn {
+    padding: 4px 10px;
+    font-size: 10px;
+    min-height: 28px;
   }
 }

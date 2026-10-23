@@ -16,10 +16,15 @@ export class Runner3D {
     this.clock = new THREE.Clock();
 
     // Biomechanical speed & cadence parameters
-    this.cadence = 165; // Steps per minute
+    this.cadence = 165; // Steps per minute (or RPM for cycling)
     this.speed = 11.2; // km/h
     this.timeScale = 1.0;
     this.cameraMode = "follow"; // Default: companion chase view from his back
+    this.isMoving = true;
+    this.motionWeight = 1.0; // 0.0 = full idle standing pose, 1.0 = full locomotion stride
+    this.stridePhase = 0; // Continuously accumulated phase angle
+    this.sport = "run"; // "run" or "ride"
+    this.isRide = false;
 
     this.init();
   }
@@ -560,78 +565,145 @@ export class Runner3D {
     }
   }
 
+  setSport(sport) {
+    this.sport = sport === "ride" ? "ride" : "run";
+    this.isRide = this.sport === "ride";
+  }
+
   setCadence(spm) {
-    this.cadence = Math.max(120, Math.min(210, spm));
+    const val = Number(spm);
+    this.cadence = Math.max(0, Math.min(240, isNaN(val) ? 0 : Math.round(val)));
   }
 
   setSpeed(kmh) {
-    this.speed = Math.max(4, Math.min(25, kmh));
+    const val = Number(kmh);
+    this.speed = Math.max(0, Math.min(75, isNaN(val) ? 0 : Number(val.toFixed(1))));
+    this.isMoving = this.speed >= 0.8;
+  }
+
+  setMoving(isMoving) {
+    this.isMoving = Boolean(isMoving);
+    if (!this.isMoving) {
+      this.speed = 0;
+      this.cadence = 0;
+    }
   }
 
   updateAnimation(delta) {
-    const strideFreq = (this.cadence / 60) * Math.PI; // rad/s
+    // 0. Smooth blend between stopped idle (0.0) and active locomotion (1.0)
+    const targetMotion = this.isMoving && this.speed >= 0.8 ? 1.0 : 0.0;
+    const blendRate = targetMotion > this.motionWeight ? 4.5 : 3.0;
+    this.motionWeight +=
+      (targetMotion - this.motionWeight) * Math.min(1.0, delta * blendRate);
+
+    // Dynamic stride / pedal frequency (rad/s)
+    const effectiveCadence =
+      this.cadence > 0 ? this.cadence : this.isRide ? 80 : 160;
+    const strideFreq = (effectiveCadence / 60) * Math.PI; // rad/s
+    this.stridePhase += strideFreq * delta * this.timeScale * this.motionWeight;
+    const cycle = this.stridePhase;
     const elapsed = this.clock.getElapsedTime();
-    const cycle = elapsed * strideFreq * this.timeScale;
+    const breath = Math.sin(elapsed * 1.8);
 
-    // 1. Pelvis Vertical Bounce & Aerodynamic Running Posture
-    // Natural stride has two vertical bounces per full cycle (one bounce per foot plant)
-    const bounce = (1 - Math.cos(cycle * 2)) * 0.055;
-    this.runnerRoot.position.y = 1.20 + bounce;
+    // 1. Pelvis & Torso Posture
+    const isRide = this.isRide;
+    const runBounce = isRide
+      ? (1 - Math.cos(cycle * 2)) * 0.015
+      : (1 - Math.cos(cycle * 2)) * 0.055;
+    const runPosY = isRide ? 1.15 + runBounce : 1.20 + runBounce;
+    const idlePosY = 1.18 + breath * 0.008;
+    this.runnerRoot.position.y =
+      idlePosY + (runPosY - idlePosY) * this.motionWeight;
 
-    // Pelvic torque & sway in counter-motion to stride
-    this.runnerRoot.rotation.y = Math.sin(cycle) * 0.08;
-    this.runnerRoot.rotation.z = Math.sin(cycle) * 0.035;
+    const runRotY = isRide ? Math.sin(cycle) * 0.03 : Math.sin(cycle) * 0.08;
+    const runRotZ = isRide ? Math.sin(cycle) * 0.02 : Math.sin(cycle) * 0.035;
+    this.runnerRoot.rotation.y = runRotY * this.motionWeight;
+    this.runnerRoot.rotation.z = runRotZ * this.motionWeight;
 
-    // Torso counter-twist & forward athletic lean (+X tilts upper body forward towards +Z)
-    this.torso.rotation.y = -Math.sin(cycle) * 0.09;
-    this.torso.rotation.x = 0.20 + Math.sin(cycle * 2) * 0.02;
+    const runTorsoX = isRide
+      ? 0.36 + Math.sin(cycle * 2) * 0.015 // Aerodynamic cycling tuck
+      : 0.20 + Math.sin(cycle * 2) * 0.02; // Forward athletic run lean
+    const idleTorsoX = 0.04 + breath * 0.012;
+    this.torso.rotation.x =
+      idleTorsoX + (runTorsoX - idleTorsoX) * this.motionWeight;
 
-    // Head stabilized looking forward along horizon
-    this.head.rotation.x = -0.12 - Math.sin(cycle * 2) * 0.015;
+    const runTorsoY = isRide
+      ? -Math.sin(cycle) * 0.03
+      : -Math.sin(cycle) * 0.09;
+    this.torso.rotation.y = runTorsoY * this.motionWeight;
 
-    // 2. Leg Kinematics (True Anatomical Human Stride Cycle)
-    const runLeg = (legGroup, phase) => {
-      // Stride phase in [0, 2*PI)
+    const runHeadX = isRide
+      ? -0.22 - Math.sin(cycle * 2) * 0.01 // Head lifted to look ahead over bike
+      : -0.12 - Math.sin(cycle * 2) * 0.015;
+    const idleHeadX = -0.02;
+    this.head.rotation.x =
+      idleHeadX + (runHeadX - idleHeadX) * this.motionWeight;
+
+    // 2. Leg Kinematics (Running stride vs Cycling pedal revolution)
+    const animateLeg = (legGroup, phase) => {
       const phi = (cycle + phase) % (Math.PI * 2);
+      let runHipRot = 0;
+      let runKneeRot = 0.12;
 
-      // Hip pitch: drives foot from front (+Z, negative X rot) to back (-Z, positive X rot) during stance
-      const hipRot = -Math.cos(phi) * 0.65;
-      legGroup.rotation.x = hipRot;
-
-      // Knee flexion:
-      // Stance (0 -> PI): foot on ground carrying body weight, slight spring shock-absorption
-      // Swing (PI -> 2*PI): foot drives back and up, knee flexes high towards glutes (-Z),
-      // then rapidly unfolds as thigh swings forward to plant
-      let kneeRot = 0.12;
-      if (phi >= Math.PI) {
-        const swingProgress = (phi - Math.PI) / Math.PI; // 0 -> 1
-        kneeRot = 0.12 + Math.sin(swingProgress * Math.PI) * 1.42;
+      if (isRide) {
+        // Cycling circular pedal stroke kinematics:
+        runHipRot = -Math.cos(phi) * 0.42;
+        runKneeRot = 0.65 + Math.sin(phi) * 0.55;
       } else {
-        kneeRot = 0.12 + Math.sin(phi) * 0.22;
+        // Running stride kinematics:
+        runHipRot = -Math.cos(phi) * 0.65;
+        if (phi >= Math.PI) {
+          const swingProgress = (phi - Math.PI) / Math.PI;
+          runKneeRot = 0.12 + Math.sin(swingProgress * Math.PI) * 1.42;
+        } else {
+          runKneeRot = 0.12 + Math.sin(phi) * 0.22;
+        }
       }
-      legGroup.knee.rotation.x = kneeRot;
+
+      // Idle standing leg: straight vertical with slight natural knee cushion
+      const idleHipRot = 0;
+      const idleKneeRot = 0.05;
+
+      legGroup.rotation.x =
+        idleHipRot + (runHipRot - idleHipRot) * this.motionWeight;
+      legGroup.knee.rotation.x =
+        idleKneeRot + (runKneeRot - idleKneeRot) * this.motionWeight;
     };
 
-    runLeg(this.leftLeg, 0);
-    runLeg(this.rightLeg, Math.PI); // 180 degrees offset
+    animateLeg(this.leftLeg, 0);
+    animateLeg(this.rightLeg, Math.PI);
 
-    // 3. Arm Kinematics (Natural Counter-Oscillation to Legs)
-    const runArm = (armGroup, phase) => {
+    // 3. Arm Kinematics (Counter-oscillation for running, handlebar reach for cycling)
+    const animateArm = (armGroup, phase) => {
       const phi = (cycle + phase) % (Math.PI * 2);
+      let runArmX = 0;
+      let runElbowX = -1.35;
 
-      // Arm swings in opposition to hip: when leg reaches forward, arm drives back
-      const armHipOpposition = Math.cos(phi) * 0.58;
-      armGroup.rotation.x = armHipOpposition;
+      if (isRide) {
+        // Cycling: arms reach forward gripping virtual handlebars with subtle cadence sway
+        runArmX = -0.42 + Math.sin(phi) * 0.04;
+        runElbowX = -1.1 + Math.cos(phi) * 0.05;
+      } else {
+        // Running: natural reciprocal arm swing in opposition to hip
+        runArmX = Math.cos(phi) * 0.58;
+        runElbowX = -1.35 + Math.sin(phi) * 0.2;
+      }
 
-      // Athletic elbow bend with dynamic flexion
-      armGroup.elbow.rotation.x = -1.35 + Math.sin(phi) * 0.2;
+      // Idle standing arm: relaxed at side with gentle breathing motion
+      const idleArmX = 0.06 + breath * 0.02;
+      const idleElbowX = -0.28;
+
+      armGroup.rotation.x =
+        idleArmX + (runArmX - idleArmX) * this.motionWeight;
+      armGroup.elbow.rotation.x =
+        idleElbowX + (runElbowX - idleElbowX) * this.motionWeight;
     };
 
-    runArm(this.leftArm, 0);
-    runArm(this.rightArm, Math.PI);
+    animateArm(this.leftArm, 0);
+    animateArm(this.rightArm, Math.PI);
 
-    // 4. Infinite Runway Scrolling (Ground moving backwards under runner's feet towards -Z)
-    const scrollSpeed = (this.speed / 3.6) * delta * 2.2;
+    // 4. Infinite Runway Scrolling (Ground moving backwards under athlete towards -Z)
+    const scrollSpeed = (this.speed / 3.6) * delta * 2.2 * this.motionWeight;
     const barSpacing = 2.2;
     const barLimit = (this.gridBars.length / 2) * barSpacing;
 
@@ -645,7 +717,11 @@ export class Runner3D {
     // 5. Particle Speed Warp Field (Particles rushing past towards -Z)
     if (this.particles) {
       const pos = this.particles.geometry.attributes.position.array;
-      const particleSpeed = (this.speed / 3.6) * delta * 4.5;
+      const activeParticleSpeed = (this.speed / 3.6) * delta * 4.5;
+      const ambientParticleSpeed = delta * 0.35;
+      const particleSpeed =
+        ambientParticleSpeed +
+        (activeParticleSpeed - ambientParticleSpeed) * this.motionWeight;
 
       for (let i = 0; i < this.particleCount; i++) {
         pos[i * 3 + 2] -= this.particleVelocities[i] * particleSpeed * 0.1;
@@ -660,13 +736,18 @@ export class Runner3D {
 
     // 6. Neon Underglow Pulse
     if (this.neonPointLight) {
-      this.neonPointLight.intensity = 2.6 + Math.sin(cycle * 2) * 0.8;
+      const runGlow = 2.6 + Math.sin(cycle * 2) * 0.8;
+      const idleGlow = 2.0 + breath * 0.4;
+      this.neonPointLight.intensity =
+        idleGlow + (runGlow - idleGlow) * this.motionWeight;
     }
 
-    // 7. Dynamic Camera Follow (Running companion perspective - elevated high angle)
+    // 7. Dynamic Camera Follow
     if (this.cameraMode === "follow") {
-      this.camera.position.x = Math.sin(cycle) * 0.08;
-      this.camera.position.y = 3.1 + bounce * 0.35;
+      const runCamX = Math.sin(cycle) * 0.08;
+      const runCamY = 3.1 + runBounce * 0.35;
+      this.camera.position.x = runCamX * this.motionWeight;
+      this.camera.position.y = 3.1 + (runCamY - 3.1) * this.motionWeight;
       this.camera.position.z = -4.8;
     }
 
@@ -674,7 +755,7 @@ export class Runner3D {
     if (this.vantaWaveMesh && this.waveOrigPositions) {
       const pos = this.vantaWaveMesh.geometry.attributes.position.array;
       const orig = this.waveOrigPositions;
-      const t = elapsed * 1.6 * (this.speed / 10);
+      const waveT = elapsed * 0.3 + this.stridePhase * 0.4;
 
       const count = pos.length / 3;
       for (let i = 0; i < count; i++) {
@@ -689,9 +770,9 @@ export class Runner3D {
         );
 
         // Multi-frequency compound trigonometric waves flowing towards -Z
-        const wave1 = Math.sin(x * 0.35 + t * 1.5);
-        const wave2 = Math.cos(z * 0.22 + t * 2.0);
-        const wave3 = Math.sin((x + z) * 0.26 + t * 0.85);
+        const wave1 = Math.sin(x * 0.35 + waveT * 1.5);
+        const wave2 = Math.cos(z * 0.22 + waveT * 2.0);
+        const wave3 = Math.sin((x + z) * 0.26 + waveT * 0.85);
 
         pos[i * 3 + 1] =
           orig[i * 3 + 1] +

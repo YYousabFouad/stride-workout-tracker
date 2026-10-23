@@ -61,6 +61,11 @@ export const initProgressScreen = function () {
   const vizSubtitle = document.getElementById("visualizer-card-subtitle");
   const hudCadence = document.getElementById("runner-hud-cadence");
   const hudSpeed = document.getElementById("runner-hud-speed");
+  const motionStatusEl = document.getElementById("runner-motion-status");
+  const motionDotEl = document.getElementById("runner-motion-indicator");
+  const btnToggleMotion = document.getElementById("btn-toggle-motion");
+  const btnMotionIcon = document.getElementById("btn-motion-icon");
+  const btnMotionLabel = document.getElementById("btn-motion-label");
 
   const sport = workout?.sport || SPORTS.RUN;
   const isRide = sport === SPORTS.RIDE;
@@ -73,6 +78,7 @@ export const initProgressScreen = function () {
   if (runnerViewport && !runner3dInstance) {
     try {
       runner3dInstance = new Runner3D(runnerViewport);
+      runner3dInstance.setSport(sport);
 
       // Camera Preset Buttons
       const camBtns = runnerViewport.querySelectorAll(".cam-preset-btn");
@@ -91,6 +97,113 @@ export const initProgressScreen = function () {
     }
   }
 
+  // Motion State & Biomechanical Telemetry Tracking
+  let isUserMoving = true;
+  let liveSpeedKmh = baseSpeed;
+  let liveCadence = baseCadence;
+  let hasReceivedRealGpsSpeed = false;
+
+  const updateMotionDisplay = (isMoving, speedKmh, cadenceVal) => {
+    isUserMoving = isMoving;
+    liveSpeedKmh = isMoving ? Number(speedKmh) || 0 : 0;
+    liveCadence = isMoving ? Math.round(Number(cadenceVal) || 0) : 0;
+
+    if (runner3dInstance) {
+      runner3dInstance.setSpeed(liveSpeedKmh);
+      runner3dInstance.setCadence(liveCadence);
+    }
+
+    if (hudCadence) {
+      hudCadence.textContent = `${liveCadence} ${isRide ? "RPM" : "SPM"}`;
+    }
+    if (hudSpeed) {
+      hudSpeed.textContent = `${liveSpeedKmh.toFixed(1)} km/h`;
+    }
+
+    if (motionStatusEl) {
+      motionStatusEl.textContent = isMoving
+        ? isRide
+          ? "CYCLING"
+          : "RUNNING"
+        : "STOPPED";
+    }
+    if (motionDotEl) {
+      if (isMoving) {
+        motionDotEl.classList.remove("stopped");
+      } else {
+        motionDotEl.classList.add("stopped");
+      }
+    }
+    if (btnToggleMotion) {
+      if (isMoving) {
+        btnToggleMotion.classList.remove("is-stopped");
+        if (btnMotionIcon) btnMotionIcon.textContent = "⏸️";
+        if (btnMotionLabel) btnMotionLabel.textContent = "Stop";
+      } else {
+        btnToggleMotion.classList.add("is-stopped");
+        if (btnMotionIcon) btnMotionIcon.textContent = "▶️";
+        if (btnMotionLabel) btnMotionLabel.textContent = "Move";
+      }
+    }
+  };
+
+  const toggleMotion = () => {
+    if (isUserMoving) {
+      updateMotionDisplay(false, 0, 0);
+    } else {
+      hasReceivedRealGpsSpeed = false;
+      updateMotionDisplay(true, baseSpeed, baseCadence);
+    }
+  };
+
+  if (btnToggleMotion) {
+    btnToggleMotion.addEventListener("click", toggleMotion);
+  }
+
+  const handleKeyDown = (e) => {
+    if (
+      e.code === "Space" &&
+      (e.target === document.body || e.target === runnerViewport)
+    ) {
+      e.preventDefault();
+      toggleMotion();
+    }
+  };
+  window.addEventListener("keydown", handleKeyDown);
+
+  // Mobile accelerometer motion sensor (detects running/cycling steps)
+  let lastStepDetectedTime = 0;
+  const handleDeviceMotion = (event) => {
+    if (!event.acceleration && !event.accelerationIncludingGravity) return;
+    const acc = event.acceleration || event.accelerationIncludingGravity;
+    const mag = Math.hypot(acc.x || 0, acc.y || 0, acc.z || 0);
+    const threshold = event.acceleration ? 2.8 : 12.6;
+    const now = Date.now();
+    if (mag > threshold && now - lastStepDetectedTime > 320) {
+      lastStepDetectedTime = now;
+      if (!isUserMoving) {
+        updateMotionDisplay(true, baseSpeed, baseCadence);
+      }
+    }
+  };
+  window.addEventListener("devicemotion", handleDeviceMotion);
+
+  const handleGpsMovement = ({ speedKmh, isMoving }) => {
+    if (typeof speedKmh === "number") {
+      hasReceivedRealGpsSpeed = true;
+      if (isMoving && speedKmh >= 0.9) {
+        // Derive athlete cadence from measured speed (SPM for run, RPM for ride)
+        const derivedCadence = isRide
+          ? Math.max(60, Math.min(115, Math.round(55 + speedKmh * 1.3)))
+          : Math.max(135, Math.min(205, Math.round(125 + speedKmh * 3.6)));
+        updateMotionDisplay(true, speedKmh, derivedCadence);
+      } else {
+        // Athlete stopped moving
+        updateMotionDisplay(false, 0, 0);
+      }
+    }
+  };
+
   // View Mode Switcher (3D Runner <-> GPS Route Map)
   if (btnMode3d && btnModeMap) {
     btnMode3d.addEventListener("click", () => {
@@ -108,6 +221,7 @@ export const initProgressScreen = function () {
         runner3dInstance.start(true);
         runner3dInstance.resize();
       }
+      updateMotionDisplay(isUserMoving, liveSpeedKmh, liveCadence);
       startTelemetry();
     });
 
@@ -135,18 +249,15 @@ export const initProgressScreen = function () {
 
   // Biomechanical Telemetry Sync Loop (Active only when 3D Runner view is visible)
   const updateTelemetry = () => {
-    if (!runner3dInstance) return;
+    if (!runner3dInstance || !isUserMoving || hasReceivedRealGpsSpeed) return;
 
     const now = Date.now();
     const cadence = Math.round(baseCadence + Math.sin(now / 3500) * 3);
-    const speed = (baseSpeed + Math.cos(now / 4200) * 0.3).toFixed(1);
+    const speed = parseFloat(
+      (baseSpeed + Math.cos(now / 4200) * 0.3).toFixed(1)
+    );
 
-    runner3dInstance.setCadence(cadence);
-    runner3dInstance.setSpeed(parseFloat(speed));
-
-    if (hudCadence)
-      hudCadence.textContent = `${cadence} ${isRide ? "RPM" : "SPM"}`;
-    if (hudSpeed) hudSpeed.textContent = `${speed} km/h`;
+    updateMotionDisplay(true, speed, cadence);
   };
 
   const startTelemetry = () => {
@@ -169,8 +280,14 @@ export const initProgressScreen = function () {
       runner3dInstance.start(true);
       runner3dInstance.resize();
     }
+    updateMotionDisplay(true, baseSpeed, baseCadence);
     startTelemetry();
   }
+
+  const cleanupListeners = () => {
+    window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("devicemotion", handleDeviceMotion);
+  };
 
   // Register unload cleanup unconditionally to ensure WebGL context and watchers are always released
   let lastStorageSaveTime = 0;
@@ -186,6 +303,7 @@ export const initProgressScreen = function () {
   window.addEventListener("beforeunload", () => {
     flushStorageSave();
     if (workoutTimerInterval) clearInterval(workoutTimerInterval);
+    cleanupListeners();
     stopTelemetry();
     stopRouteTracking();
     destroyMap();
@@ -204,7 +322,8 @@ export const initProgressScreen = function () {
   if (progressBar) progressBar.style.width = "0%";
 
   if (!workout || workout.status === "complete") {
-    if (metaTag) metaTag.textContent = "Running · 5.0 km target";
+    if (metaTag)
+      metaTag.textContent = `${isRide ? "Cycling" : "Running"} · 5.0 km target`;
     if (targetHint) {
       targetHint.textContent =
         "No workout currently in progress. Start a workout from Plan Workout!";
@@ -214,6 +333,14 @@ export const initProgressScreen = function () {
         window.location.href = "index.html";
       });
     }
+
+    // Measure live movement via GPS in preview mode
+    startRouteTracking({
+      onUpdate: ({ speedKmh, isMoving }) => {
+        handleGpsMovement({ speedKmh, isMoving });
+      },
+    });
+
     return;
   }
 
@@ -250,8 +377,9 @@ export const initProgressScreen = function () {
   startRouteTracking({
     initialCoords: workout.routeCoords || [],
     initialDistanceKm: gpsDistanceKm,
-    onUpdate: ({ coords, distanceKm }) => {
+    onUpdate: ({ coords, distanceKm, speedKmh, isMoving }) => {
       gpsDistanceKm = distanceKm;
+      handleGpsMovement({ speedKmh, isMoving });
       // Cap stored routeCoords to max 500 decimated points to mitigate storage exhaustion (CWE-400)
       if (Array.isArray(coords) && coords.length > 500) {
         const step = Math.ceil(coords.length / 500);
@@ -313,6 +441,7 @@ export const initProgressScreen = function () {
         clearInterval(workoutTimerInterval);
         workoutTimerInterval = null;
       }
+      cleanupListeners();
       stopTelemetry();
       stopRouteTracking();
       destroyMap();
