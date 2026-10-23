@@ -11,6 +11,14 @@ import {
   setStorageItem,
 } from "../core/storage.js";
 import { getStreakCount, incrementStreak, updateStreakDisplay } from "../core/streak.js";
+import {
+  addArrowToMap,
+  clearNavigation,
+  navigateToArrow,
+  showCurrentLocation,
+} from "../visualizers/map.js?v=2";
+
+let summaryMapInstance = null;
 
 export const initCompleteScreen = function () {
   const viewComplete = document.getElementById("view-complete");
@@ -44,10 +52,22 @@ export const initCompleteScreen = function () {
       Array.isArray(workout.routeCoords) &&
       workout.routeCoords.length > 0
     ) {
+      if (summaryMapInstance) {
+        try {
+          summaryMapInstance.remove();
+        } catch (err) {
+          console.warn("Error removing previous summaryMap:", err);
+        }
+        summaryMapInstance = null;
+      }
+      if (completeMapViewport._leaflet_id) {
+        delete completeMapViewport._leaflet_id;
+      }
       completeMapViewport.innerHTML = "";
-      const summaryMap = L.map("complete-map-viewport", {
+      summaryMapInstance = L.map("complete-map-viewport", {
         preferCanvas: true,
       }).setView(workout.routeCoords[0], 15);
+      const summaryMap = summaryMapInstance;
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution:
@@ -93,6 +113,97 @@ export const initCompleteScreen = function () {
       if (workout.routeCoords.length > 1) {
         summaryMap.fitBounds(polyline.getBounds(), { padding: [32, 32] });
       }
+
+      // Listen for click events anywhere on the summary map using Leaflet's .on() API
+      summaryMap.on("click", function (e) {
+        if (!e || !e.latlng) return;
+        addArrowToMap(summaryMap, e.latlng);
+      });
+
+      // Add floating controls and directions HUD banner
+      completeMapViewport.insertAdjacentHTML(
+        "beforeend",
+        `
+        <div class="map-hud-top">
+          <div class="nav-directions-banner" id="complete-directions-banner" style="display: none;">
+            <div class="nav-directions-left">
+              <div class="nav-bearing-icon" title="Compass heading">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="12 2 19 21 12 17 5 21 12 2"/>
+                </svg>
+              </div>
+              <div class="nav-directions-text">
+                <div class="nav-direction-title">Head North · 300 m</div>
+                <div class="nav-direction-meta">~2 min · Route</div>
+              </div>
+            </div>
+            <button type="button" class="nav-directions-close" id="btn-complete-cancel-directions" title="Clear directions" aria-label="Clear directions">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="map-controls-group">
+          <button
+            type="button"
+            class="map-control-btn nav-target-btn"
+            id="btn-complete-navigate"
+            title="Get directions to arrow"
+            aria-label="Get directions to arrow"
+            style="display: none;"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon">
+              <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="map-control-btn"
+            id="btn-complete-locate"
+            title="Show my current location"
+            aria-label="Show my current location"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="locate-icon">
+              <circle cx="12" cy="12" r="3"></circle>
+              <line x1="12" y1="2" x2="12" y2="6"></line>
+              <line x1="12" y1="18" x2="12" y2="22"></line>
+              <line x1="2" y1="12" x2="6" y2="12"></line>
+              <line x1="18" y1="12" x2="22" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+      `
+      );
+
+      const completeLocateBtn =
+        completeMapViewport.querySelector("#btn-complete-locate");
+      if (completeLocateBtn) {
+        completeLocateBtn.addEventListener("click", function (evt) {
+          evt.stopPropagation();
+          showCurrentLocation(summaryMap);
+        });
+      }
+
+      const completeNavBtn =
+        completeMapViewport.querySelector("#btn-complete-navigate");
+      if (completeNavBtn) {
+        completeNavBtn.addEventListener("click", function (evt) {
+          evt.stopPropagation();
+          navigateToArrow(summaryMap);
+        });
+      }
+
+      const completeCancelBtn =
+        completeMapViewport.querySelector("#btn-complete-cancel-directions");
+      if (completeCancelBtn) {
+        completeCancelBtn.addEventListener("click", function (evt) {
+          evt.stopPropagation();
+          clearNavigation(summaryMap);
+        });
+      }
+
       setTimeout(() => summaryMap.invalidateSize(), 100);
     }
   }
@@ -208,5 +319,17 @@ export const initCompleteScreen = function () {
 
   document.addEventListener("stride:account-cancelled", function () {
     waitingForAccount = false;
+  });
+
+  window.addEventListener("beforeunload", () => {
+    if (summaryMapInstance) {
+      try {
+        clearNavigation(summaryMapInstance);
+        summaryMapInstance.remove();
+      } catch (err) {
+        // Silently ignore unload errors
+      }
+      summaryMapInstance = null;
+    }
   });
 };

@@ -49,9 +49,16 @@ const NAV_ITEMS = [
 const FLAME_ICON_PATH =
   "M12.87 2.5a.75.75 0 0 0-1.28-.53 10.3 10.3 0 0 0-3.3 6.64 6.72 6.72 0 0 0-2.43 1.94A7.47 7.47 0 0 0 4.5 15a7.5 7.5 0 0 0 15 0c0-3.16-1.95-5.91-4.78-7.06a.75.75 0 0 0-.96.95 4.8 4.8 0 0 1 .24 1.51c0 1.25-.6 2.37-1.53 3.08-.24.18-.57.1-.7-.16a7.27 7.27 0 0 0 .1-2.82 8.76 8.76 0 0 0-2-4.5 8.78 8.78 0 0 0-3.7-2.73.75.75 0 0 0-.3.23z";
 
+const ALLOWED_PAGES = new Set([
+  "index.html",
+  "progress.html",
+  "complete.html",
+  "history.html",
+]);
+
 const getCurrentPage = function () {
   const filename = window.location.pathname.split("/").pop();
-  return filename && filename.endsWith(".html") ? filename : "index.html";
+  return filename && ALLOWED_PAGES.has(filename) ? filename : "index.html";
 };
 
 const renderNavbar = function (currentPage) {

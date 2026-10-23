@@ -60,6 +60,24 @@
   pointer-events: none;
 }
 
+.map-control-btn:active {
+  transform: scale(0.94);
+}
+
+.map-control-btn.is-locating .locate-icon {
+  animation: spinLocate 0.9s linear infinite;
+  color: var(--color-brand-cyan);
+}
+
+@keyframes spinLocate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
 .gps-badge {
   pointer-events: auto;
   display: inline-flex;
@@ -86,6 +104,90 @@
   height: 7px;
   border-radius: 50%;
   background-color: var(--color-text-muted);
+}
+
+/* Directions Navigation HUD Banner */
+.nav-directions-banner {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background-color: rgba(14, 21, 26, 0.94);
+  border: 1px solid rgba(0, 217, 245, 0.4);
+  backdrop-filter: blur(12px);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 24px -4px rgba(0, 0, 0, 0.65), 0 0 16px rgba(0, 217, 245, 0.2);
+  margin-top: var(--space-2);
+  animation: slideBannerDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 320px;
+}
+
+@keyframes slideBannerDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.nav-directions-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.nav-bearing-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 217, 245, 0.15);
+  border: 1px solid var(--color-brand-cyan);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-brand-cyan);
+  flex-shrink: 0;
+  transition: transform 0.25s ease-out;
+}
+
+.nav-direction-title {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.nav-direction-meta {
+  font-size: 11px;
+  color: var(--color-brand-cyan);
+  font-weight: var(--font-weight-medium);
+  margin-top: 1px;
+}
+
+.nav-directions-close {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.nav-directions-close:hover {
+  background: rgba(248, 113, 113, 0.2);
+  color: var(--color-status-danger);
 }
 
 /* Map Floating Controls */
@@ -116,8 +218,34 @@
 
 .map-control-btn:hover {
   background-color: var(--color-bg-card-hover);
-  border-color: var(--color-border-medium);
-  color: var(--color-brand-primary);
+  border-color: var(--color-brand-cyan);
+  color: var(--color-brand-cyan);
+  box-shadow: 0 0 12px rgba(0, 217, 245, 0.25);
+}
+
+.map-control-btn.nav-target-btn {
+  color: var(--color-brand-cyan);
+}
+
+.map-control-btn.nav-target-btn:hover,
+.map-control-btn.nav-target-btn.active {
+  background-color: rgba(0, 217, 245, 0.22);
+  border-color: var(--color-brand-cyan);
+  color: var(--color-brand-cyan);
+  box-shadow: 0 0 14px rgba(0, 217, 245, 0.4);
+}
+
+/* Animated Guidance Polyline */
+.nav-guide-polyline {
+  stroke-dasharray: 8, 8;
+  animation: dashWalk 1.2s linear infinite;
+  filter: drop-shadow(0 0 8px rgba(0, 217, 245, 0.8));
+}
+
+@keyframes dashWalk {
+  to {
+    stroke-dashoffset: -16;
+  }
 }
 
 /* Route SVG Mockup Display (Figma Exact Vector Representation) */
@@ -163,6 +291,78 @@
 }
 
 /* ==========================================================================
+   Click Arrow Markers (.on('click') Interactive Markers)
+   ========================================================================== */
+.stride-map-arrow-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.map-arrow-marker-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 48px;
+  transform-origin: 18px 44px;
+  animation: arrowDropIn 0.32s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  filter: drop-shadow(0 3px 8px rgba(0, 217, 245, 0.45))
+    drop-shadow(0 6px 14px rgba(0, 0, 0, 0.85));
+  cursor: pointer;
+  transition: transform var(--transition-fast), filter var(--transition-fast);
+}
+
+.map-arrow-marker-pin:hover {
+  transform: scale(1.16) translateY(-3px);
+  filter: drop-shadow(0 0 16px var(--color-brand-cyan))
+    drop-shadow(0 0 8px var(--color-brand-primary))
+    drop-shadow(0 8px 18px rgba(0, 0, 0, 0.9));
+}
+
+.map-arrow-svg {
+  display: block;
+  overflow: visible;
+}
+
+.arrow-ground-ring {
+  animation: pulseRing 1.8s ease-out infinite;
+  transform-origin: 18px 44px;
+}
+
+@keyframes pulseRing {
+  0% {
+    r: 3px;
+    opacity: 0.9;
+    stroke-width: 2px;
+  }
+  70% {
+    r: 8px;
+    opacity: 0.2;
+    stroke-width: 1px;
+  }
+  100% {
+    r: 10px;
+    opacity: 0;
+    stroke-width: 0.5px;
+  }
+}
+
+@keyframes arrowDropIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-26px) scale(0.6);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ==========================================================================
    Mobile Phone Map Viewport Adjustments (max-width: 768px)
    ========================================================================== */
 @media (max-width: 768px) {
@@ -192,4 +392,5 @@
     font-size: 11px;
   }
 }
+
 

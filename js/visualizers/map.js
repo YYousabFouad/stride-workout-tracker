@@ -22,6 +22,11 @@ let routeCoords = [];
 let totalTrackedDistanceKm = 0;
 let isTrackingStopped = false;
 let onRouteUpdateCallback = null;
+let clickArrowMarker = null;
+let locationAccuracyCircle = null;
+let navGuidePolyline = null;
+let navGuideCasingPolyline = null;
+let isNavigatingToArrow = false;
 
 const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const OSM_ATTRIBUTION =
@@ -62,6 +67,518 @@ const updateGpsStatusBadge = function (isActive, message) {
   }
 };
 
+export const createArrowIcon = function () {
+  return L.divIcon({
+    className: "stride-map-arrow-icon",
+    html: `
+      <div class="map-arrow-marker-pin" role="img" aria-label="Target Arrow">
+        <svg class="map-arrow-svg" width="36" height="48" viewBox="0 0 36 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="strideArrowGrad" x1="18" y1="2" x2="18" y2="44" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#cdfa5a" />
+              <stop offset="40%" stop-color="#bbf448" />
+              <stop offset="100%" stop-color="#00d9f5" />
+            </linearGradient>
+            <linearGradient id="arrowFacet" x1="4" y1="12" x2="18" y2="44" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="0.4" />
+              <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+            </linearGradient>
+          </defs>
+          <!-- Ground pulse radar ring -->
+          <circle class="arrow-ground-ring" cx="18" cy="44" r="5" stroke="#00d9f5" stroke-width="1.5" fill="none" />
+          <!-- Aerodynamic Stealth Arrow Body -->
+          <path
+            d="M18 43 L4 12 C2.8 9.5 4.6 6.5 7.4 6.5 H12.5 L18 14 L23.5 6.5 H28.6 C31.4 6.5 33.2 9.5 32 12 L18 43 Z"
+            fill="url(#strideArrowGrad)"
+            stroke="#060d0c"
+            stroke-width="2.2"
+            stroke-linejoin="round"
+          />
+          <!-- 3D Bevel Facet Highlight -->
+          <path
+            d="M18 43 L4 12 C2.8 9.5 4.6 6.5 7.4 6.5 H12.5 L18 14 V43 Z"
+            fill="url(#arrowFacet)"
+          />
+          <!-- High-tech Center Ridge Line -->
+          <line x1="18" y1="14" x2="18" y2="41" stroke="#060d0c" stroke-width="2" stroke-linecap="round" opacity="0.8" />
+          <circle cx="18" cy="22" r="2.5" fill="#060d0c" />
+          <circle cx="18" cy="22" r="1.2" fill="#ffffff" />
+        </svg>
+      </div>
+    `,
+    iconSize: [36, 48],
+    iconAnchor: [18, 44],
+  });
+};
+
+export const setOrMoveArrowMarker = function (targetMap, latlng) {
+  if (!targetMap || !latlng || typeof L === "undefined") return null;
+
+  const normalized = Array.isArray(latlng)
+    ? L.latLng(latlng[0], latlng[1])
+    : latlng;
+
+  if (!clickArrowMarker) {
+    clickArrowMarker = L.marker(normalized, {
+      icon: createArrowIcon(),
+      title: "Target Arrow · Click to navigate here",
+    }).addTo(targetMap);
+
+    // Clicking the arrow marker directly also triggers directions
+    if (typeof clickArrowMarker.on === "function") {
+      clickArrowMarker.on("click", function (evt) {
+        if (evt && evt.originalEvent) {
+          evt.originalEvent.stopPropagation();
+        }
+        navigateToArrow(targetMap);
+      });
+    }
+  } else {
+    clickArrowMarker.setLatLng(normalized);
+    if (!targetMap.hasLayer(clickArrowMarker)) {
+      clickArrowMarker.addTo(targetMap);
+    }
+    // Replay drop animation so it visibly drops/hops at the new position
+    const el = clickArrowMarker.getElement();
+    if (el) {
+      const pin = el.querySelector(".map-arrow-marker-pin");
+      if (pin) {
+        pin.style.animation = "none";
+        requestAnimationFrame(() => {
+          pin.style.animation = "";
+        });
+      }
+    }
+  }
+
+  // Reveal the Navigate button in the map controls
+  const navBtns = [
+    document.getElementById("btn-navigate-arrow"),
+    document.getElementById("btn-complete-navigate"),
+  ].filter(Boolean);
+  navBtns.forEach((btn) => {
+    btn.style.display = "flex";
+  });
+
+  // If already navigating, dynamically update the directions route to the new arrow location
+  if (isNavigatingToArrow) {
+    navigateToArrow(targetMap);
+  }
+
+  return clickArrowMarker;
+};
+
+export const addArrowToMap = setOrMoveArrowMarker;
+
+export const getClickArrowMarker = function () {
+  return clickArrowMarker;
+};
+
+export const clearClickArrowMarker = function () {
+  clearNavigation(map);
+  if (map && clickArrowMarker) {
+    map.removeLayer(clickArrowMarker);
+  }
+  clickArrowMarker = null;
+
+  // Hide navigate buttons when arrow is cleared
+  const navBtns = [
+    document.getElementById("btn-navigate-arrow"),
+    document.getElementById("btn-complete-navigate"),
+  ].filter(Boolean);
+  navBtns.forEach((btn) => {
+    btn.style.display = "none";
+  });
+};
+
+/**
+ * Calculate forward compass azimuth / bearing in degrees [0, 359]
+ * @param {[number, number]} coordA [lat1, lon1]
+ * @param {[number, number]} coordB [lat2, lon2]
+ * @returns {number}
+ */
+export const calculateBearing = function (coordA, coordB) {
+  if (!Array.isArray(coordA) || !Array.isArray(coordB)) return 0;
+  const [lat1, lon1] = coordA;
+  const [lat2, lon2] = coordB;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const toDeg = (rad) => (rad * 180) / Math.PI;
+
+  const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+  const bearing = (toDeg(Math.atan2(y, x)) + 360) % 360;
+  return Math.round(bearing);
+};
+
+/**
+ * Convert bearing in degrees to 8-point compass cardinal direction
+ * @param {number} bearing
+ * @returns {string}
+ */
+export const getCompassDirection = function (bearing) {
+  const directions = [
+    "North",
+    "North-East",
+    "East",
+    "South-East",
+    "South",
+    "South-West",
+    "West",
+    "North-West",
+  ];
+  const index = Math.round(bearing / 45) % 8;
+  return directions[index];
+};
+
+/**
+ * Fetch pedestrian route from OpenStreetMap Routing Machine (OSRM)
+ * @param {[number, number]} start [lat, lon]
+ * @param {[number, number]} dest [lat, lon]
+ * @returns {Promise<{ coords: [number, number][], distanceMeters: number, durationSec: number }>}
+ */
+export const fetchOsrmRoute = async function (start, dest) {
+  const [startLat, startLon] = start;
+  const [destLat, destLon] = dest;
+
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 3500) : null;
+
+  try {
+    const url = `https://router.project-osrm.org/route/v1/foot/${startLon},${startLat};${destLon},${destLat}?overview=full&geometries=geojson`;
+    const res = await fetch(url, controller ? { signal: controller.signal } : {});
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (!res.ok) throw new Error(`OSRM status ${res.status}`);
+    const data = await res.json();
+
+    if (data.code === "Ok" && Array.isArray(data.routes) && data.routes.length > 0) {
+      const best = data.routes[0];
+      const coords = best.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+      return {
+        coords,
+        distanceMeters: best.distance,
+        durationSec: best.duration,
+      };
+    }
+    throw new Error("No route found in response");
+  } catch (err) {
+    if (timeoutId) clearTimeout(timeoutId);
+    throw err;
+  }
+};
+
+export const isNavigating = function () {
+  return isNavigatingToArrow;
+};
+
+export const clearNavigation = function (targetMap = map) {
+  isNavigatingToArrow = false;
+  const activeMap = targetMap || map;
+
+  if (activeMap) {
+    if (navGuidePolyline && activeMap.hasLayer(navGuidePolyline)) {
+      activeMap.removeLayer(navGuidePolyline);
+    }
+    if (navGuideCasingPolyline && activeMap.hasLayer(navGuideCasingPolyline)) {
+      activeMap.removeLayer(navGuideCasingPolyline);
+    }
+  }
+  navGuidePolyline = null;
+  navGuideCasingPolyline = null;
+
+  // Hide directions banners
+  const banners = [
+    document.getElementById("map-directions-banner"),
+    document.getElementById("complete-directions-banner"),
+  ].filter(Boolean);
+  banners.forEach((b) => {
+    b.style.display = "none";
+  });
+
+  // Reset navigate button states
+  const navBtns = [
+    document.getElementById("btn-navigate-arrow"),
+    document.getElementById("btn-complete-navigate"),
+  ].filter(Boolean);
+  navBtns.forEach((btn) => {
+    btn.classList.remove("active");
+    btn.setAttribute("aria-pressed", "false");
+    btn.setAttribute("title", "Get directions to arrow");
+  });
+};
+
+/**
+ * Lead athlete from current position to the placed arrow marker with turn/direction guidance
+ * @param {L.Map} targetMap
+ */
+export const navigateToArrow = async function (targetMap = map) {
+  const activeMap = targetMap || map;
+  if (!activeMap || !clickArrowMarker) return;
+
+  const targetLatLng = clickArrowMarker.getLatLng();
+  const dest = [targetLatLng.lat, targetLatLng.lng];
+
+  // Determine current athlete position
+  let start = null;
+  if (currentMarker) {
+    const cll = currentMarker.getLatLng();
+    start = [cll.lat, cll.lng];
+  } else if (routeCoords.length > 0) {
+    start = routeCoords[routeCoords.length - 1];
+  } else {
+    start = getStoredLocation();
+  }
+
+  isNavigatingToArrow = true;
+
+  // Update navigate button states to active
+  const navBtns = [
+    document.getElementById("btn-navigate-arrow"),
+    document.getElementById("btn-complete-navigate"),
+  ].filter(Boolean);
+  navBtns.forEach((btn) => {
+    btn.classList.add("active");
+    btn.setAttribute("aria-pressed", "true");
+    btn.setAttribute("title", "Clear directions");
+    btn.style.display = "flex";
+  });
+
+  const distKm = calculateHaversineKm(start, dest);
+  const bearing = calculateBearing(start, dest);
+  const compass = getCompassDirection(bearing);
+  const distStr = distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`;
+  const estMins = Math.max(1, Math.round((distKm / 11) * 60));
+
+  const updateBannerUI = (title, meta, bearingDeg) => {
+    const banners = [
+      document.getElementById("map-directions-banner"),
+      document.getElementById("complete-directions-banner"),
+    ].filter(Boolean);
+
+    banners.forEach((banner) => {
+      banner.style.display = "flex";
+      const titleEl = banner.querySelector(".nav-direction-title");
+      const metaEl = banner.querySelector(".nav-direction-meta");
+      const arrowEl = banner.querySelector(".nav-bearing-icon");
+
+      if (titleEl) titleEl.textContent = title;
+      if (metaEl) metaEl.textContent = meta;
+      if (arrowEl && Number.isFinite(bearingDeg)) {
+        arrowEl.style.transform = `rotate(${bearingDeg}deg)`;
+      }
+    });
+  };
+
+  const renderGuidePolyline = (coords) => {
+    if (!isNavigatingToArrow || !activeMap) return;
+
+    if (!navGuideCasingPolyline) {
+      navGuideCasingPolyline = L.polyline(coords, {
+        color: "#060d0c",
+        weight: 8,
+        opacity: 0.85,
+        lineCap: "round",
+        lineJoin: "round",
+      }).addTo(activeMap);
+    } else {
+      navGuideCasingPolyline.setLatLngs(coords);
+      if (!activeMap.hasLayer(navGuideCasingPolyline)) {
+        navGuideCasingPolyline.addTo(activeMap);
+      }
+    }
+
+    if (!navGuidePolyline) {
+      navGuidePolyline = L.polyline(coords, {
+        color: "#00d9f5",
+        weight: 4.5,
+        opacity: 1,
+        dashArray: "8, 8",
+        className: "nav-guide-polyline",
+        lineCap: "round",
+        lineJoin: "round",
+      }).addTo(activeMap);
+    } else {
+      navGuidePolyline.setLatLngs(coords);
+      if (!activeMap.hasLayer(navGuidePolyline)) {
+        navGuidePolyline.addTo(activeMap);
+      }
+    }
+
+    if (coords.length > 1) {
+      if (typeof activeMap.fitBounds === "function") {
+        activeMap.fitBounds(L.latLngBounds ? L.latLngBounds(coords) : coords, {
+          padding: [45, 45],
+          maxZoom: 17,
+        });
+      }
+    }
+  };
+
+  // 1. Render immediate direct guideline while fetching road routing
+  renderGuidePolyline([start, dest]);
+  updateBannerUI(
+    `Head ${compass} · ${distStr}`,
+    `~${estMins} min · Calculating path...`,
+    bearing
+  );
+
+  // 2. Fetch precision street routing from OSRM
+  try {
+    const route = await fetchOsrmRoute(start, dest);
+    if (!isNavigatingToArrow) return;
+    renderGuidePolyline(route.coords);
+    const roadDistStr =
+      route.distanceMeters < 1000
+        ? `${Math.round(route.distanceMeters)} m`
+        : `${(route.distanceMeters / 1000).toFixed(1)} km`;
+    const roadMins = Math.max(1, Math.round(route.durationSec / 60));
+    updateBannerUI(
+      `Head ${compass} · ${roadDistStr}`,
+      `~${roadMins} min · Walking route`,
+      bearing
+    );
+  } catch {
+    if (!isNavigatingToArrow) return;
+    // Graceful offline fallback: keep direct guidance line
+    renderGuidePolyline([start, dest]);
+    updateBannerUI(
+      `Head ${compass} · ${distStr}`,
+      `~${estMins} min · Direct guideline`,
+      bearing
+    );
+  }
+};
+
+export const showCurrentLocation = function (targetMap = map, options = {}) {
+  const activeMap = targetMap || map;
+  const locateBtns = [
+    document.getElementById("btn-show-location"),
+    document.getElementById("btn-complete-locate"),
+  ].filter(Boolean);
+
+  locateBtns.forEach((btn) => {
+    btn.classList.add("is-locating");
+    btn.setAttribute("aria-busy", "true");
+  });
+
+  updateGpsStatusBadge(true, "Acquiring current GPS fix...");
+
+  const handleSuccess = function (coords, accuracy = 0) {
+    locateBtns.forEach((btn) => {
+      btn.classList.remove("is-locating");
+      btn.removeAttribute("aria-busy");
+    });
+
+    const [lat, lng] = coords;
+    setStorageItem(STORAGE_KEYS.LAST_LOCATION, coords);
+    updateGpsStatusBadge(true, "Live GPS Active");
+
+    if (activeMap) {
+      if (typeof activeMap.flyTo === "function") {
+        activeMap.flyTo([lat, lng], 17, { duration: 1 });
+      } else if (typeof activeMap.setView === "function") {
+        activeMap.setView([lat, lng], 17, { animate: true });
+      }
+
+      if (!currentMarker) {
+        currentMarker = L.circleMarker([lat, lng], {
+          radius: 9,
+          color: "#060d0c",
+          weight: 3,
+          fillColor: "#00d9f5",
+          fillOpacity: 1,
+        }).addTo(activeMap);
+      } else {
+        currentMarker.setLatLng([lat, lng]);
+        if (!activeMap.hasLayer(currentMarker)) {
+          currentMarker.addTo(activeMap);
+        }
+      }
+
+      // Add or update accuracy halo if accuracy is available
+      if (accuracy > 0 && typeof L.circle === "function") {
+        if (locationAccuracyCircle && activeMap.hasLayer(locationAccuracyCircle)) {
+          activeMap.removeLayer(locationAccuracyCircle);
+        }
+        locationAccuracyCircle = L.circle([lat, lng], {
+          radius: Math.min(accuracy, 200),
+          color: "#00d9f5",
+          weight: 1,
+          opacity: 0.5,
+          fillColor: "#00d9f5",
+          fillOpacity: 0.08,
+        }).addTo(activeMap);
+      }
+    }
+
+    if (typeof options.onSuccess === "function") {
+      options.onSuccess(coords, accuracy);
+    }
+  };
+
+  const handleError = function (err) {
+    locateBtns.forEach((btn) => {
+      btn.classList.remove("is-locating");
+      btn.removeAttribute("aria-busy");
+    });
+
+    console.warn("Geolocation fix unavailable, displaying stored position:", err);
+    const fallbackCoords = getStoredLocation();
+
+    updateGpsStatusBadge(false, "GPS unavailable · Showing last known position");
+
+    if (activeMap) {
+      if (typeof activeMap.flyTo === "function") {
+        activeMap.flyTo(fallbackCoords, 16, { duration: 1 });
+      } else if (typeof activeMap.setView === "function") {
+        activeMap.setView(fallbackCoords, 16, { animate: true });
+      }
+
+      if (!currentMarker) {
+        currentMarker = L.circleMarker(fallbackCoords, {
+          radius: 9,
+          color: "#060d0c",
+          weight: 3,
+          fillColor: "#00d9f5",
+          fillOpacity: 1,
+        }).addTo(activeMap);
+      } else {
+        currentMarker.setLatLng(fallbackCoords);
+        if (!activeMap.hasLayer(currentMarker)) {
+          currentMarker.addTo(activeMap);
+        }
+      }
+    }
+
+    if (typeof options.onError === "function") {
+      options.onError(err);
+    }
+  };
+
+  if (typeof navigator !== "undefined" && navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        handleSuccess(
+          [pos.coords.latitude, pos.coords.longitude],
+          pos.coords.accuracy || 0
+        );
+      },
+      function (err) {
+        handleError(err);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 5000,
+      }
+    );
+  } else {
+    handleError(new Error("Geolocation unsupported"));
+  }
+};
+
 const renderFallbackState = function (container, message) {
   if (map) return;
   container.innerHTML = `
@@ -90,6 +607,54 @@ const ensureMapInitialized = function (initialCoords) {
           <span class="gps-indicator-dot"></span>
           <span id="map-gps-status">${routeCoords.length > 0 ? "Live GPS Active" : "Acquiring GPS signal..."}</span>
         </div>
+        <div class="nav-directions-banner" id="map-directions-banner" style="display: none;">
+          <div class="nav-directions-left">
+            <div class="nav-bearing-icon" title="Compass heading">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 19 21 12 17 5 21 12 2"/>
+              </svg>
+            </div>
+            <div class="nav-directions-text">
+              <div class="nav-direction-title">Head North · 300 m</div>
+              <div class="nav-direction-meta">~2 min · Route</div>
+            </div>
+          </div>
+          <button type="button" class="nav-directions-close" id="btn-cancel-directions" title="Clear directions" aria-label="Clear directions">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="map-controls-group">
+        <button
+          type="button"
+          class="map-control-btn nav-target-btn"
+          id="btn-navigate-arrow"
+          title="Get directions to arrow"
+          aria-label="Get directions to arrow"
+          style="display: none;"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon">
+            <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="map-control-btn"
+          id="btn-show-location"
+          title="Current location"
+          aria-label="Current location"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="locate-icon">
+            <circle cx="12" cy="12" r="3"></circle>
+            <line x1="12" y1="2" x2="12" y2="6"></line>
+            <line x1="12" y1="18" x2="12" y2="22"></line>
+            <line x1="2" y1="12" x2="6" y2="12"></line>
+            <line x1="18" y1="12" x2="22" y2="12"></line>
+          </svg>
+        </button>
       </div>
     `;
 
@@ -146,6 +711,43 @@ const ensureMapInitialized = function (initialCoords) {
         .addTo(map)
         .bindPopup("Live GPS Position · Active Route");
     }
+
+    // Attach locate current position button listener
+    const locateFloatingBtn = mapContainer.querySelector("#btn-show-location");
+    if (locateFloatingBtn) {
+      locateFloatingBtn.addEventListener("click", function (evt) {
+        evt.stopPropagation();
+        showCurrentLocation(map);
+      });
+    }
+
+    // Attach navigate to arrow button listener
+    const navigateFloatingBtn = mapContainer.querySelector("#btn-navigate-arrow");
+    if (navigateFloatingBtn) {
+      navigateFloatingBtn.addEventListener("click", function (evt) {
+        evt.stopPropagation();
+        if (isNavigatingToArrow) {
+          clearNavigation(map);
+        } else {
+          navigateToArrow(map);
+        }
+      });
+    }
+
+    // Attach dismiss directions banner button listener
+    const cancelDirectionsBtn = mapContainer.querySelector("#btn-cancel-directions");
+    if (cancelDirectionsBtn) {
+      cancelDirectionsBtn.addEventListener("click", function (evt) {
+        evt.stopPropagation();
+        clearNavigation(map);
+      });
+    }
+
+    // Listen for click events anywhere on the map using Leaflet's .on() API
+    map.on("click", function (e) {
+      if (!e || !e.latlng) return;
+      setOrMoveArrowMarker(map, e.latlng);
+    });
 
     // Immediately trigger layout recalculation
     requestAnimationFrame(() => {
@@ -241,6 +843,47 @@ const recordCoordinate = function (coords, accuracy = 0) {
       distanceKm: totalTrackedDistanceKm,
       currentPosition: coords,
     });
+  }
+
+  // Live real-time directions update if athlete is navigating to the arrow
+  if (isNavigatingToArrow && clickArrowMarker) {
+    const targetLatLng = clickArrowMarker.getLatLng();
+    const dest = [targetLatLng.lat, targetLatLng.lng];
+    const remainingKm = calculateHaversineKm(coords, dest);
+
+    if (remainingKm <= 0.015) {
+      const banners = [
+        document.getElementById("map-directions-banner"),
+        document.getElementById("complete-directions-banner"),
+      ].filter(Boolean);
+      banners.forEach((banner) => {
+        const titleEl = banner.querySelector(".nav-direction-title");
+        const metaEl = banner.querySelector(".nav-direction-meta");
+        if (titleEl) titleEl.textContent = "Target reached! 🎯";
+        if (metaEl) metaEl.textContent = "You have arrived at your arrow location";
+      });
+    } else {
+      const bearing = calculateBearing(coords, dest);
+      const compass = getCompassDirection(bearing);
+      const distStr =
+        remainingKm < 1
+          ? `${Math.round(remainingKm * 1000)} m`
+          : `${remainingKm.toFixed(1)} km`;
+      const estMins = Math.max(1, Math.round((remainingKm / 11) * 60));
+
+      const banners = [
+        document.getElementById("map-directions-banner"),
+        document.getElementById("complete-directions-banner"),
+      ].filter(Boolean);
+      banners.forEach((banner) => {
+        const titleEl = banner.querySelector(".nav-direction-title");
+        const metaEl = banner.querySelector(".nav-direction-meta");
+        const arrowEl = banner.querySelector(".nav-bearing-icon");
+        if (titleEl) titleEl.textContent = `Head ${compass} · ${distStr}`;
+        if (metaEl) metaEl.textContent = `~${estMins} min remaining`;
+        if (arrowEl) arrowEl.style.transform = `rotate(${bearing}deg)`;
+      });
+    }
   }
 };
 
@@ -358,4 +1001,28 @@ export const loadMap = function () {
   }
 };
 
-export const initMap = loadMap;
+/**
+ * Clean up active Leaflet map instance and tracking state
+ */
+export const destroyMap = function () {
+  clearNavigation(map);
+  stopRouteTracking();
+  if (map) {
+    try {
+      map.remove();
+    } catch (err) {
+      // Silently ignore teardown errors
+    }
+    map = null;
+  }
+  routePolyline = null;
+  routeCasingPolyline = null;
+  originMarker = null;
+  currentMarker = null;
+  clickArrowMarker = null;
+  locationAccuracyCircle = null;
+  routeCoords = [];
+  totalTrackedDistanceKm = 0;
+  onRouteUpdateCallback = null;
+  isTrackingStopped = false;
+};

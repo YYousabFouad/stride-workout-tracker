@@ -15,6 +15,7 @@ import {
 } from "../core/storage.js";
 import { Runner3D } from "../visualizers/runner-3d.js?v=2";
 import {
+  destroyMap,
   getRouteData,
   loadMap,
   startRouteTracking,
@@ -103,6 +104,7 @@ export const initProgressScreen = function () {
         runner3dInstance.start(true);
         runner3dInstance.resize();
       }
+      startTelemetry();
     });
 
     btnModeMap.addEventListener("click", async () => {
@@ -115,12 +117,19 @@ export const initProgressScreen = function () {
       if (runnerViewport) runnerViewport.style.display = "none";
       if (vizTitle) vizTitle.textContent = "Live route";
       if (vizSubtitle) vizSubtitle.textContent = "GPS breadcrumb tracking";
+      stopTelemetry();
       if (runner3dInstance) runner3dInstance.pause(true);
       loadMap();
     });
+
+    // Auto-switch to map view if requested via URL param (?mode=map or #map)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("mode") === "map" || window.location.hash === "#map") {
+      btnModeMap.click();
+    }
   }
 
-  // Biomechanical Telemetry Sync Loop
+  // Biomechanical Telemetry Sync Loop (Active only when 3D Runner view is visible)
   const updateTelemetry = () => {
     if (!runner3dInstance) return;
 
@@ -136,9 +145,20 @@ export const initProgressScreen = function () {
     if (hudSpeed) hudSpeed.textContent = `${speed} km/h`;
   };
 
-  updateTelemetry();
-  if (telemetryInterval) clearInterval(telemetryInterval);
-  telemetryInterval = setInterval(updateTelemetry, 1500);
+  const startTelemetry = () => {
+    if (telemetryInterval) clearInterval(telemetryInterval);
+    updateTelemetry();
+    telemetryInterval = setInterval(updateTelemetry, 1500);
+  };
+
+  const stopTelemetry = () => {
+    if (telemetryInterval) {
+      clearInterval(telemetryInterval);
+      telemetryInterval = null;
+    }
+  };
+
+  startTelemetry();
 
   // =========================================================================
   // 2. Telemetry and Workout State
@@ -244,11 +264,9 @@ export const initProgressScreen = function () {
         clearInterval(workoutTimerInterval);
         workoutTimerInterval = null;
       }
-      if (telemetryInterval) {
-        clearInterval(telemetryInterval);
-        telemetryInterval = null;
-      }
+      stopTelemetry();
       stopRouteTracking();
+      destroyMap();
       if (runner3dInstance) {
         runner3dInstance.destroy();
         runner3dInstance = null;
@@ -290,8 +308,9 @@ export const initProgressScreen = function () {
   // Cleanup on unload to prevent WebGL context and geolocation watcher leaks
   window.addEventListener("beforeunload", () => {
     if (workoutTimerInterval) clearInterval(workoutTimerInterval);
-    if (telemetryInterval) clearInterval(telemetryInterval);
+    stopTelemetry();
     stopRouteTracking();
+    destroyMap();
     if (runner3dInstance) {
       runner3dInstance.destroy();
       runner3dInstance = null;
