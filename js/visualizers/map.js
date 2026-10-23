@@ -120,9 +120,8 @@ export const createArrowIcon = function () {
 export const setOrMoveArrowMarker = function (targetMap, latlng) {
   if (!targetMap || !latlng || typeof L === "undefined") return null;
 
-  const normalized = Array.isArray(latlng)
-    ? L.latLng(latlng[0], latlng[1])
-    : latlng;
+  const normalized =
+    Array.isArray(latlng) ? L.latLng(latlng[0], latlng[1]) : latlng;
 
   if (!clickArrowMarker) {
     clickArrowMarker = L.marker(normalized, {
@@ -218,7 +217,9 @@ export const calculateBearing = function (coordA, coordB) {
   const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
   const x =
     Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+    Math.sin(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.cos(toRad(lon2 - lon1));
   const bearing = (toDeg(Math.atan2(y, x)) + 360) % 360;
   return Math.round(bearing);
 };
@@ -250,7 +251,11 @@ export const getCompassDirection = function (bearing) {
  * @param {AbortSignal|null} [externalSignal=null]
  * @returns {Promise<{ coords: [number, number][], distanceMeters: number, durationSec: number }>}
  */
-export const fetchOsrmRoute = async function (start, dest, externalSignal = null) {
+export const fetchOsrmRoute = async function (
+  start,
+  dest,
+  externalSignal = null,
+) {
   if (
     !Array.isArray(start) ||
     !Array.isArray(dest) ||
@@ -267,8 +272,10 @@ export const fetchOsrmRoute = async function (start, dest, externalSignal = null
   const [startLat, startLon] = start;
   const [destLat, destLon] = dest;
 
-  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timeoutId = controller ? setTimeout(() => controller.abort(), 3500) : null;
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId =
+    controller ? setTimeout(() => controller.abort(), 3500) : null;
 
   const handleExternalAbort = () => {
     if (controller) controller.abort();
@@ -278,13 +285,18 @@ export const fetchOsrmRoute = async function (start, dest, externalSignal = null
     if (externalSignal.aborted) {
       controller.abort();
     } else {
-      externalSignal.addEventListener("abort", handleExternalAbort, { once: true });
+      externalSignal.addEventListener("abort", handleExternalAbort, {
+        once: true,
+      });
     }
   }
 
   try {
     const url = `https://router.project-osrm.org/route/v1/foot/${startLon},${startLat};${destLon},${destLat}?overview=full&geometries=geojson`;
-    const res = await fetch(url, controller ? { signal: controller.signal } : {});
+    const res = await fetch(
+      url,
+      controller ? { signal: controller.signal } : {},
+    );
     if (timeoutId) clearTimeout(timeoutId);
     if (externalSignal) {
       externalSignal.removeEventListener("abort", handleExternalAbort);
@@ -293,7 +305,11 @@ export const fetchOsrmRoute = async function (start, dest, externalSignal = null
     if (!res.ok) throw new Error(`OSRM status ${res.status}`);
     const data = await res.json();
 
-    if (data.code === "Ok" && Array.isArray(data.routes) && data.routes.length > 0) {
+    if (
+      data.code === "Ok" &&
+      Array.isArray(data.routes) &&
+      data.routes.length > 0
+    ) {
       const best = data.routes[0];
       const coords = best.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
       return {
@@ -445,9 +461,8 @@ export const navigateToArrow = async function (targetMap = map) {
   }
   activeOsrmAbortController =
     typeof AbortController !== "undefined" ? new AbortController() : null;
-  const currentSignal = activeOsrmAbortController
-    ? activeOsrmAbortController.signal
-    : null;
+  const currentSignal =
+    activeOsrmAbortController ? activeOsrmAbortController.signal : null;
 
   // Mark HUD headers as active navigation so mobile screens dock cleanly at top without blocking road
   const hudContainers = [
@@ -473,7 +488,8 @@ export const navigateToArrow = async function (targetMap = map) {
   const distKm = calculateHaversineKm(start, dest);
   const bearing = calculateBearing(start, dest);
   const compass = getCompassDirection(bearing);
-  const distStr = distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`;
+  const distStr =
+    distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`;
   const estMins = Math.max(1, Math.round((distKm / 11) * 60));
 
   const updateBannerUI = (title, meta, bearingDeg) => {
@@ -550,28 +566,32 @@ export const navigateToArrow = async function (targetMap = map) {
   updateBannerUI(
     `Head ${compass} · ${distStr}`,
     `~${estMins} min · Calculating path...`,
-    bearing
+    bearing,
   );
-  showNavToast("Navigating to Destination", `Calculating walking route · ${distStr}`);
+  showNavToast(
+    "Navigating to Destination",
+    `Calculating walking route · ${distStr}`,
+  );
 
   // 2. Fetch precision street routing from OSRM
   try {
     const route = await fetchOsrmRoute(start, dest, currentSignal);
-    if (!isNavigatingToArrow || (currentSignal && currentSignal.aborted)) return;
+    if (!isNavigatingToArrow || (currentSignal && currentSignal.aborted))
+      return;
     renderGuidePolyline(route.coords);
     const roadDistStr =
-      route.distanceMeters < 1000
-        ? `${Math.round(route.distanceMeters)} m`
-        : `${(route.distanceMeters / 1000).toFixed(1)} km`;
+      route.distanceMeters < 1000 ?
+        `${Math.round(route.distanceMeters)} m`
+      : `${(route.distanceMeters / 1000).toFixed(1)} km`;
     const roadMins = Math.max(1, Math.round(route.durationSec / 60));
     updateBannerUI(
       `Head ${compass} · ${roadDistStr}`,
       `~${roadMins} min · Walking route`,
-      bearing
+      bearing,
     );
     showNavToast(
       "Navigating to Destination",
-      `${roadDistStr} · ~${roadMins} min walking route`
+      `${roadDistStr} · ~${roadMins} min walking route`,
     );
   } catch {
     if (currentSignal && currentSignal.aborted) return;
@@ -581,12 +601,9 @@ export const navigateToArrow = async function (targetMap = map) {
     updateBannerUI(
       `Head ${compass} · ${distStr}`,
       `~${estMins} min · Direct guideline`,
-      bearing
+      bearing,
     );
-    showNavToast(
-      "Navigating to Destination",
-      `Direct guideline · ${distStr}`
-    );
+    showNavToast("Navigating to Destination", `Direct guideline · ${distStr}`);
   }
 };
 
@@ -638,7 +655,10 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
 
       // Add or update accuracy halo if accuracy is available
       if (accuracy > 0 && typeof L.circle === "function") {
-        if (locationAccuracyCircle && activeMap.hasLayer(locationAccuracyCircle)) {
+        if (
+          locationAccuracyCircle &&
+          activeMap.hasLayer(locationAccuracyCircle)
+        ) {
           activeMap.removeLayer(locationAccuracyCircle);
         }
         locationAccuracyCircle = L.circle([lat, lng], {
@@ -665,15 +685,14 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
 
     const isTimeout = err && err.code === 3;
     const isDenied = err && err.code === 1;
-    const reasonMsg = isDenied
-      ? "Location permission denied"
-      : isTimeout
-        ? "GPS fix timed out"
-        : "GPS unavailable";
+    const reasonMsg =
+      isDenied ? "Location permission denied"
+      : isTimeout ? "GPS fix timed out"
+      : "GPS unavailable";
 
     console.info(
       `Notice: ${reasonMsg}, displaying stored position:`,
-      err ? err.message || err : ""
+      err ? err.message || err : "",
     );
     const fallbackCoords = getStoredLocation();
 
@@ -713,7 +732,7 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
       function (pos) {
         handleSuccess(
           [pos.coords.latitude, pos.coords.longitude],
-          pos.coords.accuracy || 0
+          pos.coords.accuracy || 0,
         );
       },
       function (err) {
@@ -724,7 +743,7 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
             function (coarsePos) {
               handleSuccess(
                 [coarsePos.coords.latitude, coarsePos.coords.longitude],
-                coarsePos.coords.accuracy || 0
+                coarsePos.coords.accuracy || 0,
               );
             },
             function () {
@@ -734,7 +753,7 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
               enableHighAccuracy: false,
               timeout: 6000,
               maximumAge: 120000,
-            }
+            },
           );
           return;
         }
@@ -744,7 +763,7 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
         enableHighAccuracy: true,
         timeout: 6000,
         maximumAge: 10000,
-      }
+      },
     );
   } else {
     handleError(new Error("Geolocation unsupported"));
@@ -905,7 +924,9 @@ const ensureMapInitialized = function (initialCoords) {
     }
 
     // Attach navigate to arrow button listener
-    const navigateFloatingBtn = mapContainer.querySelector("#btn-navigate-arrow");
+    const navigateFloatingBtn = mapContainer.querySelector(
+      "#btn-navigate-arrow",
+    );
     if (navigateFloatingBtn) {
       navigateFloatingBtn.addEventListener("click", function (evt) {
         evt.stopPropagation();
@@ -918,7 +939,9 @@ const ensureMapInitialized = function (initialCoords) {
     }
 
     // Attach dismiss directions banner button listener
-    const cancelDirectionsBtn = mapContainer.querySelector("#btn-cancel-directions");
+    const cancelDirectionsBtn = mapContainer.querySelector(
+      "#btn-cancel-directions",
+    );
     if (cancelDirectionsBtn) {
       cancelDirectionsBtn.addEventListener("click", function (evt) {
         evt.stopPropagation();
@@ -927,15 +950,19 @@ const ensureMapInitialized = function (initialCoords) {
     }
 
     // Tapping instructions banner re-displays momentary status toast on demand
-    const directionsBannerEl = mapContainer.querySelector("#map-directions-banner");
+    const directionsBannerEl = mapContainer.querySelector(
+      "#map-directions-banner",
+    );
     if (directionsBannerEl) {
       directionsBannerEl.addEventListener("click", function (evt) {
         if (evt.target.closest("#btn-cancel-directions")) return;
-        const titleEl = directionsBannerEl.querySelector(".nav-direction-title");
+        const titleEl = directionsBannerEl.querySelector(
+          ".nav-direction-title",
+        );
         const metaEl = directionsBannerEl.querySelector(".nav-direction-meta");
         showNavToast(
           titleEl ? titleEl.textContent : "Navigating to Destination",
-          metaEl ? metaEl.textContent : "Follow highlighted path on your map"
+          metaEl ? metaEl.textContent : "Follow highlighted path on your map",
         );
       });
     }
@@ -962,7 +989,7 @@ const recordCoordinate = function (
   coords,
   accuracy = 0,
   nativeSpeed = null,
-  timestamp = Date.now()
+  timestamp = Date.now(),
 ) {
   if (isTrackingStopped) return;
 
@@ -994,9 +1021,9 @@ const recordCoordinate = function (
     measuredSpeed = 0;
   } else {
     measuredSpeed =
-      currentGpsSpeedKmh > 0
-        ? currentGpsSpeedKmh * 0.35 + measuredSpeed * 0.65
-        : measuredSpeed;
+      currentGpsSpeedKmh > 0 ?
+        currentGpsSpeedKmh * 0.35 + measuredSpeed * 0.65
+      : measuredSpeed;
   }
 
   currentGpsSpeedKmh = Number(measuredSpeed.toFixed(1));
@@ -1073,7 +1100,7 @@ const recordCoordinate = function (
       if (routeCoords.length > 600) {
         routeCoords = routeCoords.filter(
           (_, idx) =>
-            idx === 0 || idx === routeCoords.length - 1 || idx % 2 === 0
+            idx === 0 || idx === routeCoords.length - 1 || idx % 2 === 0,
         );
       }
     }
@@ -1134,16 +1161,20 @@ const recordCoordinate = function (
         const titleEl = banner.querySelector(".nav-direction-title");
         const metaEl = banner.querySelector(".nav-direction-meta");
         if (titleEl) titleEl.textContent = "Target reached! 🎯";
-        if (metaEl) metaEl.textContent = "You have arrived at your arrow location";
+        if (metaEl)
+          metaEl.textContent = "You have arrived at your arrow location";
       });
-      showNavToast("Target reached! 🎯", "You have arrived at your arrow location");
+      showNavToast(
+        "Target reached! 🎯",
+        "You have arrived at your arrow location",
+      );
     } else {
       const bearing = calculateBearing(coords, dest);
       const compass = getCompassDirection(bearing);
       const distStr =
-        remainingKm < 1
-          ? `${Math.round(remainingKm * 1000)} m`
-          : `${remainingKm.toFixed(1)} km`;
+        remainingKm < 1 ?
+          `${Math.round(remainingKm * 1000)} m`
+        : `${remainingKm.toFixed(1)} km`;
       const estMins = Math.max(1, Math.round((remainingKm / 11) * 60));
 
       const banners = [
@@ -1163,12 +1194,20 @@ const recordCoordinate = function (
 };
 
 export const startRouteTracking = function (options = {}) {
-  const { initialCoords = [], initialDistanceKm = 0, onUpdate = null } = options;
+  const {
+    initialCoords = [],
+    initialDistanceKm = 0,
+    onUpdate = null,
+  } = options;
 
   onRouteUpdateCallback = onUpdate;
   isTrackingStopped = false;
 
-  if (Array.isArray(initialCoords) && initialCoords.length > 0 && routeCoords.length === 0) {
+  if (
+    Array.isArray(initialCoords) &&
+    initialCoords.length > 0 &&
+    routeCoords.length === 0
+  ) {
     routeCoords = [...initialCoords];
     totalTrackedDistanceKm = Number(initialDistanceKm) || 0;
   }
@@ -1194,7 +1233,7 @@ export const startRouteTracking = function (options = {}) {
         enableHighAccuracy: false,
         maximumAge: 300000,
         timeout: 3000,
-      }
+      },
     );
   }
 
@@ -1212,7 +1251,7 @@ export const startRouteTracking = function (options = {}) {
       if (!map && mapContainer) {
         renderFallbackState(
           mapContainer,
-          "Location access unavailable · Showing simulated grid"
+          "Location access unavailable · Showing simulated grid",
         );
       } else {
         updateGpsStatusBadge(false, "GPS signal lost · Retrying...");
@@ -1222,7 +1261,7 @@ export const startRouteTracking = function (options = {}) {
       enableHighAccuracy: true,
       timeout: 10000,
       maximumAge: 5000,
-    }
+    },
   );
 };
 
