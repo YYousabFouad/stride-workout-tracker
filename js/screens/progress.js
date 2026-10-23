@@ -162,6 +162,16 @@ export const initProgressScreen = function () {
     }
   };
 
+  // Ensure 3D runner animation and telemetry HUD are running if 3D viewport is active
+  const isMapMode = mapViewport && mapViewport.style.display === "block";
+  if (!isMapMode && runnerViewport) {
+    if (runner3dInstance) {
+      runner3dInstance.start(true);
+      runner3dInstance.resize();
+    }
+    startTelemetry();
+  }
+
   // Register unload cleanup unconditionally to ensure WebGL context and watchers are always released
   let lastStorageSaveTime = 0;
   const STORAGE_SAVE_THROTTLE_MS = 3000;
@@ -199,14 +209,13 @@ export const initProgressScreen = function () {
       targetHint.textContent =
         "No workout currently in progress. Start a workout from Plan Workout!";
     }
-    // Conserve GPU and battery by pausing 3D runner when no workout is active
-    if (runner3dInstance) {
-      runner3dInstance.pause(true);
+    if (endWorkoutBtn) {
+      endWorkoutBtn.addEventListener("click", () => {
+        window.location.href = "index.html";
+      });
     }
     return;
   }
-
-  startTelemetry();
 
   // Populate Meta Tag & Hint
   if (metaTag) {
