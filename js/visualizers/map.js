@@ -172,10 +172,6 @@ export const setOrMoveArrowMarker = function (targetMap, latlng) {
 
 export const addArrowToMap = setOrMoveArrowMarker;
 
-export const getClickArrowMarker = function () {
-  return clickArrowMarker;
-};
-
 export const clearClickArrowMarker = function (targetMap = map) {
   const activeMap = targetMap || map;
   clearNavigation(activeMap);
@@ -204,6 +200,14 @@ export const calculateBearing = function (coordA, coordB) {
   if (!Array.isArray(coordA) || !Array.isArray(coordB)) return 0;
   const [lat1, lon1] = coordA;
   const [lat2, lon2] = coordB;
+  if (
+    !Number.isFinite(lat1) ||
+    !Number.isFinite(lon1) ||
+    !Number.isFinite(lat2) ||
+    !Number.isFinite(lon2)
+  ) {
+    return 0;
+  }
   const toRad = (deg) => (deg * Math.PI) / 180;
   const toDeg = (rad) => (rad * 180) / Math.PI;
 
@@ -243,17 +247,34 @@ export const getCompassDirection = function (bearing) {
  * @returns {Promise<{ coords: [number, number][], distanceMeters: number, durationSec: number }>}
  */
 export const fetchOsrmRoute = async function (start, dest, externalSignal = null) {
+  if (
+    !Array.isArray(start) ||
+    !Array.isArray(dest) ||
+    start.length < 2 ||
+    dest.length < 2 ||
+    !Number.isFinite(start[0]) ||
+    !Number.isFinite(start[1]) ||
+    !Number.isFinite(dest[0]) ||
+    !Number.isFinite(dest[1])
+  ) {
+    throw new Error("Invalid start or destination coordinates for routing");
+  }
+
   const [startLat, startLon] = start;
   const [destLat, destLon] = dest;
 
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timeoutId = controller ? setTimeout(() => controller.abort(), 3500) : null;
 
+  const handleExternalAbort = () => {
+    if (controller) controller.abort();
+  };
+
   if (externalSignal && controller) {
     if (externalSignal.aborted) {
       controller.abort();
     } else {
-      externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
+      externalSignal.addEventListener("abort", handleExternalAbort, { once: true });
     }
   }
 
@@ -261,6 +282,9 @@ export const fetchOsrmRoute = async function (start, dest, externalSignal = null
     const url = `https://router.project-osrm.org/route/v1/foot/${startLon},${startLat};${destLon},${destLat}?overview=full&geometries=geojson`;
     const res = await fetch(url, controller ? { signal: controller.signal } : {});
     if (timeoutId) clearTimeout(timeoutId);
+    if (externalSignal) {
+      externalSignal.removeEventListener("abort", handleExternalAbort);
+    }
 
     if (!res.ok) throw new Error(`OSRM status ${res.status}`);
     const data = await res.json();
@@ -277,6 +301,9 @@ export const fetchOsrmRoute = async function (start, dest, externalSignal = null
     throw new Error("No route found in response");
   } catch (err) {
     if (timeoutId) clearTimeout(timeoutId);
+    if (externalSignal) {
+      externalSignal.removeEventListener("abort", handleExternalAbort);
+    }
     throw err;
   }
 };
@@ -1187,6 +1214,10 @@ export const loadMap = function () {
  * Clean up active Leaflet map instance and tracking state
  */
 export const destroyMap = function () {
+  if (navToastTimeout) {
+    clearTimeout(navToastTimeout);
+    navToastTimeout = null;
+  }
   if (activeOsrmAbortController) {
     activeOsrmAbortController.abort();
     activeOsrmAbortController = null;

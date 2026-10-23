@@ -333,26 +333,6 @@
   filter: drop-shadow(0 0 6px var(--color-brand-primary));
 }
 
-.route-pulse-marker {
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  background-color: var(--color-brand-primary);
-  border: 3px solid #060d0c;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 14px var(--color-brand-primary);
-}
-
-.route-pulse-marker::after {
-  content: '';
-  position: absolute;
-  inset: -8px;
-  border-radius: 50%;
-  border: 2px solid var(--color-brand-primary);
-  animation: pulseGlow 1.8s infinite;
-}
-
 /* ==========================================================================
    Click Arrow Markers (.on('click') Interactive Markers)
    ========================================================================== */

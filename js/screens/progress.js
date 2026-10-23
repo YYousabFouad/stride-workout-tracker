@@ -25,8 +25,12 @@ import {
 let workoutTimerInterval = null;
 let telemetryInterval = null;
 let runner3dInstance = null;
+let isProgressInitialized = false;
 
 export const initProgressScreen = function () {
+  if (isProgressInitialized) return;
+  isProgressInitialized = true;
+
   const viewProgress = document.getElementById("view-progress");
   if (!viewProgress) return;
 
@@ -194,6 +198,10 @@ export const initProgressScreen = function () {
     if (targetHint) {
       targetHint.textContent =
         "No workout currently in progress. Start a workout from Plan Workout!";
+    }
+    // Conserve GPU and battery by pausing 3D runner when no workout is active
+    if (runner3dInstance) {
+      runner3dInstance.pause(true);
     }
     return;
   }

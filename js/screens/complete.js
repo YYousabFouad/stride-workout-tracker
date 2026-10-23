@@ -13,6 +13,7 @@ import {
 import { getStreakCount, incrementStreak, updateStreakDisplay } from "../core/streak.js";
 import {
   addArrowToMap,
+  clearClickArrowMarker,
   clearNavigation,
   isNavigating,
   navigateToArrow,
@@ -21,8 +22,12 @@ import {
 } from "../visualizers/map.js?v=2";
 
 let summaryMapInstance = null;
+let isCompleteInitialized = false;
 
 export const initCompleteScreen = function () {
+  if (isCompleteInitialized) return;
+  isCompleteInitialized = true;
+
   const viewComplete = document.getElementById("view-complete");
   if (!viewComplete) return;
 
@@ -356,6 +361,7 @@ export const initCompleteScreen = function () {
   window.addEventListener("beforeunload", () => {
     if (summaryMapInstance) {
       try {
+        clearClickArrowMarker(summaryMapInstance);
         clearNavigation(summaryMapInstance);
         summaryMapInstance.remove();
       } catch (err) {

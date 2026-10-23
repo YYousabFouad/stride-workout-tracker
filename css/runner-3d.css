@@ -202,10 +202,6 @@
     gap: 6px;
   }
 
-  .runner-drag-hint {
-    display: none; /* Keep clean on small mobile viewports */
-  }
-
   .runner-hud-bottom {
     bottom: max(var(--space-3), env(safe-area-inset-bottom, 0px));
     left: var(--space-3);

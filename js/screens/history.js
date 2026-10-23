@@ -5,7 +5,12 @@
 
 import { SPORTS, STORAGE_KEYS, getStorageItem } from "../core/storage.js";
 
+let isHistoryInitialized = false;
+
 export const initHistoryScreen = function () {
+  if (isHistoryInitialized) return;
+  isHistoryInitialized = true;
+
   const viewHistory = document.getElementById("view-history");
   if (!viewHistory) return;
 

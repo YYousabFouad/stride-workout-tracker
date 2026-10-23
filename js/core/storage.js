@@ -145,21 +145,6 @@ export const sanitizeGoal = function (rawGoal) {
 };
 
 /**
- * HTML-escape special characters to prevent Cross-Site Scripting (CWE-79)
- * @param {string} str
- * @returns {string}
- */
-export const escapeHtml = function (str) {
-  if (typeof str !== "string") return "";
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-};
-
-/**
  * Sanitize text inputs: strip non-printable/control characters and enforce max length
  * @param {string} str
  * @param {number} maxLength
@@ -179,12 +164,16 @@ export const sanitizeString = function (str, maxLength = 50) {
  */
 export const safeJsonParse = function (raw) {
   if (!raw || typeof raw !== "string") return null;
-  return JSON.parse(raw, (key, value) => {
-    if (key === "__proto__" || key === "constructor" || key === "prototype") {
-      return undefined;
-    }
-    return value;
-  });
+  try {
+    return JSON.parse(raw, (key, value) => {
+      if (key === "__proto__" || key === "constructor" || key === "prototype") {
+        return undefined;
+      }
+      return value;
+    });
+  } catch {
+    return null;
+  }
 };
 
 /**

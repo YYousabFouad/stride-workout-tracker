@@ -14,7 +14,12 @@ import {
   setStorageItem,
 } from "../core/storage.js";
 
+let isPlanInitialized = false;
+
 export const initPlanWorkoutScreen = function () {
+  if (isPlanInitialized) return;
+  isPlanInitialized = true;
+
   const workoutForm = document.querySelector(".workout-form");
   const targetInput = document.getElementById("target-input");
   const targetUnitLabel = document.getElementById("target-unit-label");
