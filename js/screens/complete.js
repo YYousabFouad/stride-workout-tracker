@@ -14,8 +14,10 @@ import { getStreakCount, incrementStreak, updateStreakDisplay } from "../core/st
 import {
   addArrowToMap,
   clearNavigation,
+  isNavigating,
   navigateToArrow,
   showCurrentLocation,
+  showNavToast,
 } from "../visualizers/map.js?v=2";
 
 let summaryMapInstance = null;
@@ -124,8 +126,8 @@ export const initCompleteScreen = function () {
       completeMapViewport.insertAdjacentHTML(
         "beforeend",
         `
-        <div class="map-hud-top">
-          <div class="nav-directions-banner" id="complete-directions-banner" style="display: none;">
+        <div class="map-hud-top" id="complete-map-hud-top">
+          <div class="nav-directions-banner" id="complete-directions-banner" style="display: none;" role="status" title="Navigation instructions">
             <div class="nav-directions-left">
               <div class="nav-bearing-icon" title="Compass heading">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -143,6 +145,17 @@ export const initCompleteScreen = function () {
                 <line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
             </button>
+          </div>
+        </div>
+        <div class="nav-moment-toast" id="complete-nav-toast" style="display: none;" role="status">
+          <div class="nav-moment-toast-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+            </svg>
+          </div>
+          <div class="nav-moment-toast-content">
+            <div class="nav-moment-toast-title">Navigating to Destination</div>
+            <div class="nav-moment-toast-sub">Follow the highlighted path on your map</div>
           </div>
         </div>
         <div class="map-controls-group">
@@ -191,7 +204,11 @@ export const initCompleteScreen = function () {
       if (completeNavBtn) {
         completeNavBtn.addEventListener("click", function (evt) {
           evt.stopPropagation();
-          navigateToArrow(summaryMap);
+          if (isNavigating()) {
+            clearNavigation(summaryMap);
+          } else {
+            navigateToArrow(summaryMap);
+          }
         });
       }
 
@@ -201,6 +218,21 @@ export const initCompleteScreen = function () {
         completeCancelBtn.addEventListener("click", function (evt) {
           evt.stopPropagation();
           clearNavigation(summaryMap);
+        });
+      }
+
+      // Tapping complete directions banner re-displays momentary status toast on demand
+      const completeDirectionsBannerEl =
+        completeMapViewport.querySelector("#complete-directions-banner");
+      if (completeDirectionsBannerEl) {
+        completeDirectionsBannerEl.addEventListener("click", function (evt) {
+          if (evt.target.closest("#btn-complete-cancel-directions")) return;
+          const titleEl = completeDirectionsBannerEl.querySelector(".nav-direction-title");
+          const metaEl = completeDirectionsBannerEl.querySelector(".nav-direction-meta");
+          showNavToast(
+            titleEl ? titleEl.textContent : "Navigating to Destination",
+            metaEl ? metaEl.textContent : "Follow highlighted path on your map"
+          );
         });
       }
 

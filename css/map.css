@@ -122,6 +122,69 @@
   margin-top: var(--space-2);
   animation: slideBannerDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   max-width: 320px;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Momentary Navigation Toast (Appears for a few moments when navigation starts and auto-dissolves) */
+.nav-moment-toast {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-10px);
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: rgba(6, 13, 12, 0.95);
+  border: 1px solid var(--color-brand-cyan);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.8), 0 0 16px rgba(0, 217, 245, 0.3);
+  backdrop-filter: blur(14px);
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  max-width: 90%;
+}
+
+.nav-moment-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.nav-moment-toast-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(0, 217, 245, 0.18);
+  border: 1px solid var(--color-brand-cyan);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-brand-cyan);
+  flex-shrink: 0;
+  animation: pulseRing 1.8s ease-out infinite;
+}
+
+.nav-moment-toast-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-moment-toast-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.nav-moment-toast-sub {
+  font-size: 11px;
+  color: var(--color-brand-cyan);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.2;
 }
 
 @keyframes slideBannerDown {
@@ -374,6 +437,81 @@
   .map-viewport {
     min-height: 330px;
     height: 330px;
+  }
+
+  .map-hud-top {
+    top: var(--space-2);
+    left: var(--space-2);
+    right: var(--space-2);
+    gap: var(--space-2);
+  }
+
+  /* When navigating on mobile phones, hide the redundant GPS badge so instructions span flush at the top */
+  .map-hud-top.is-navigating .gps-badge {
+    display: none !important;
+  }
+
+  /* Sleek, non-blocking navigation instruction bar docked at the top of the map */
+  .nav-directions-banner {
+    width: 100%;
+    max-width: 100%;
+    margin-top: 0;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.75), 0 0 10px rgba(0, 217, 245, 0.2);
+    background-color: rgba(6, 13, 12, 0.94);
+    gap: var(--space-2);
+  }
+
+  .nav-bearing-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .nav-bearing-icon svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .nav-direction-title {
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .nav-direction-meta {
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  .nav-directions-close {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Momentary navigation toast formatted cleanly on mobile screens */
+  .nav-moment-toast {
+    top: 50px;
+    padding: 6px 12px;
+    max-width: calc(100% - 24px);
+    white-space: normal;
+  }
+
+  .nav-moment-toast-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .nav-moment-toast-icon svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .nav-moment-toast-title {
+    font-size: 11px;
+  }
+
+  .nav-moment-toast-sub {
+    font-size: 10px;
   }
 
   .map-controls-group {

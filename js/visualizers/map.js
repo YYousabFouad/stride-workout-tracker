@@ -28,6 +28,7 @@ let navGuidePolyline = null;
 let navGuideCasingPolyline = null;
 let isNavigatingToArrow = false;
 let activeOsrmAbortController = null;
+let navToastTimeout = null;
 
 const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const OSM_ATTRIBUTION =
@@ -284,6 +285,43 @@ export const isNavigating = function () {
   return isNavigatingToArrow;
 };
 
+export const showNavToast = function (title, subtitle) {
+  const toasts = [
+    document.getElementById("map-nav-toast"),
+    document.getElementById("complete-nav-toast"),
+  ].filter(Boolean);
+
+  if (navToastTimeout) {
+    clearTimeout(navToastTimeout);
+    navToastTimeout = null;
+  }
+
+  toasts.forEach((toast) => {
+    const titleEl = toast.querySelector(".nav-moment-toast-title");
+    const subEl = toast.querySelector(".nav-moment-toast-sub");
+    if (titleEl && title) titleEl.textContent = title;
+    if (subEl && subtitle) subEl.textContent = subtitle;
+
+    toast.style.display = "flex";
+    // Force CSS reflow to ensure smooth transition
+    void toast.offsetHeight;
+    toast.classList.add("visible");
+  });
+
+  // Dissolve message automatically after a few moments (3.5s) so map and road remain clear
+  navToastTimeout = setTimeout(() => {
+    toasts.forEach((toast) => {
+      toast.classList.remove("visible");
+      setTimeout(() => {
+        if (!toast.classList.contains("visible")) {
+          toast.style.display = "none";
+        }
+      }, 350);
+    });
+    navToastTimeout = null;
+  }, 3500);
+};
+
 export const clearNavigation = function (targetMap = map) {
   if (activeOsrmAbortController) {
     activeOsrmAbortController.abort();
@@ -303,6 +341,15 @@ export const clearNavigation = function (targetMap = map) {
   navGuidePolyline = null;
   navGuideCasingPolyline = null;
 
+  // Restore HUD headers from navigating layout
+  const hudContainers = [
+    document.getElementById("map-hud-top"),
+    document.getElementById("complete-map-hud-top"),
+  ].filter(Boolean);
+  hudContainers.forEach((h) => {
+    h.classList.remove("is-navigating");
+  });
+
   // Hide directions banners
   const banners = [
     document.getElementById("map-directions-banner"),
@@ -311,6 +358,20 @@ export const clearNavigation = function (targetMap = map) {
   banners.forEach((b) => {
     b.style.display = "none";
   });
+
+  // Dismiss any momentary toast
+  const toasts = [
+    document.getElementById("map-nav-toast"),
+    document.getElementById("complete-nav-toast"),
+  ].filter(Boolean);
+  toasts.forEach((t) => {
+    t.classList.remove("visible");
+    t.style.display = "none";
+  });
+  if (navToastTimeout) {
+    clearTimeout(navToastTimeout);
+    navToastTimeout = null;
+  }
 
   // Reset navigate button states
   const navBtns = [
@@ -356,6 +417,15 @@ export const navigateToArrow = async function (targetMap = map) {
   const currentSignal = activeOsrmAbortController
     ? activeOsrmAbortController.signal
     : null;
+
+  // Mark HUD headers as active navigation so mobile screens dock cleanly at top without blocking road
+  const hudContainers = [
+    document.getElementById("map-hud-top"),
+    document.getElementById("complete-map-hud-top"),
+  ].filter(Boolean);
+  hudContainers.forEach((h) => {
+    h.classList.add("is-navigating");
+  });
 
   // Update navigate button states to active
   const navBtns = [
@@ -432,8 +502,12 @@ export const navigateToArrow = async function (targetMap = map) {
 
     if (coords.length > 1) {
       if (typeof activeMap.fitBounds === "function") {
+        const isMobile =
+          typeof window !== "undefined" && window.innerWidth <= 768;
+        // On phone screens, ensure top padding keeps the road and destination completely clear beneath top instructions
         activeMap.fitBounds(L.latLngBounds ? L.latLngBounds(coords) : coords, {
-          padding: [45, 45],
+          paddingTopLeft: isMobile ? [16, 62] : [45, 45],
+          paddingBottomRight: isMobile ? [16, 42] : [45, 45],
           maxZoom: 17,
         });
       }
@@ -447,6 +521,7 @@ export const navigateToArrow = async function (targetMap = map) {
     `~${estMins} min · Calculating path...`,
     bearing
   );
+  showNavToast("Navigating to Destination", `Calculating walking route · ${distStr}`);
 
   // 2. Fetch precision street routing from OSRM
   try {
@@ -463,6 +538,10 @@ export const navigateToArrow = async function (targetMap = map) {
       `~${roadMins} min · Walking route`,
       bearing
     );
+    showNavToast(
+      "Navigating to Destination",
+      `${roadDistStr} · ~${roadMins} min walking route`
+    );
   } catch {
     if (currentSignal && currentSignal.aborted) return;
     if (!isNavigatingToArrow) return;
@@ -472,6 +551,10 @@ export const navigateToArrow = async function (targetMap = map) {
       `Head ${compass} · ${distStr}`,
       `~${estMins} min · Direct guideline`,
       bearing
+    );
+    showNavToast(
+      "Navigating to Destination",
+      `Direct guideline · ${distStr}`
     );
   }
 };
@@ -660,12 +743,12 @@ const ensureMapInitialized = function (initialCoords) {
 
   if (!map) {
     mapContainer.innerHTML = `
-      <div class="map-hud-top">
+      <div class="map-hud-top" id="map-hud-top">
         <div class="gps-badge ${routeCoords.length > 0 ? "active" : ""}" id="map-gps-badge">
           <span class="gps-indicator-dot"></span>
           <span id="map-gps-status">${routeCoords.length > 0 ? "Live GPS Active" : "Acquiring GPS signal..."}</span>
         </div>
-        <div class="nav-directions-banner" id="map-directions-banner" style="display: none;">
+        <div class="nav-directions-banner" id="map-directions-banner" style="display: none;" role="status" title="Navigation instructions">
           <div class="nav-directions-left">
             <div class="nav-bearing-icon" title="Compass heading">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -683,6 +766,17 @@ const ensureMapInitialized = function (initialCoords) {
               <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
           </button>
+        </div>
+      </div>
+      <div class="nav-moment-toast" id="map-nav-toast" style="display: none;" role="status">
+        <div class="nav-moment-toast-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+          </svg>
+        </div>
+        <div class="nav-moment-toast-content">
+          <div class="nav-moment-toast-title">Navigating to Destination</div>
+          <div class="nav-moment-toast-sub">Follow the highlighted path on your map</div>
         </div>
       </div>
       <div class="map-controls-group">
@@ -798,6 +892,20 @@ const ensureMapInitialized = function (initialCoords) {
       cancelDirectionsBtn.addEventListener("click", function (evt) {
         evt.stopPropagation();
         clearNavigation(map);
+      });
+    }
+
+    // Tapping instructions banner re-displays momentary status toast on demand
+    const directionsBannerEl = mapContainer.querySelector("#map-directions-banner");
+    if (directionsBannerEl) {
+      directionsBannerEl.addEventListener("click", function (evt) {
+        if (evt.target.closest("#btn-cancel-directions")) return;
+        const titleEl = directionsBannerEl.querySelector(".nav-direction-title");
+        const metaEl = directionsBannerEl.querySelector(".nav-direction-meta");
+        showNavToast(
+          titleEl ? titleEl.textContent : "Navigating to Destination",
+          metaEl ? metaEl.textContent : "Follow highlighted path on your map"
+        );
       });
     }
 
@@ -935,6 +1043,7 @@ const recordCoordinate = function (coords, accuracy = 0) {
         if (titleEl) titleEl.textContent = "Target reached! 🎯";
         if (metaEl) metaEl.textContent = "You have arrived at your arrow location";
       });
+      showNavToast("Target reached! 🎯", "You have arrived at your arrow location");
     } else {
       const bearing = calculateBearing(coords, dest);
       const compass = getCompassDirection(bearing);
