@@ -51,7 +51,7 @@ export const initCompleteScreen = function () {
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
       }).addTo(summaryMap);
 
       // Outer casing (Google Maps crisp ruler-drawn border outline)
@@ -140,6 +140,13 @@ export const initCompleteScreen = function () {
     if (!workout || !saveWorkoutBtn || saveWorkoutBtn.disabled || workout.saved) return;
 
     workout.saved = true;
+
+    // Decimate route coordinates if excessively large to prevent localStorage QuotaExceededError (CWE-400)
+    if (Array.isArray(workout.routeCoords) && workout.routeCoords.length > 500) {
+      const step = Math.ceil(workout.routeCoords.length / 500);
+      workout.routeCoords = workout.routeCoords.filter((_, idx) => idx % step === 0);
+    }
+
     setStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT, workout);
     setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
 
@@ -159,7 +166,7 @@ export const initCompleteScreen = function () {
       minute: "2-digit",
     });
 
-    // Append to workout history
+    // Append to workout history with bounded size (max 50 recent items to prevent storage exhaustion)
     const storedHistory = getStorageItem(STORAGE_KEYS.HISTORY);
     const historyList = Array.isArray(storedHistory) ? storedHistory : [];
     const historyItem = {
@@ -173,7 +180,8 @@ export const initCompleteScreen = function () {
       sport,
     };
     historyList.unshift(historyItem);
-    setStorageItem(STORAGE_KEYS.HISTORY, historyList);
+    const boundedHistory = historyList.slice(0, 50);
+    setStorageItem(STORAGE_KEYS.HISTORY, boundedHistory);
 
     saveWorkoutBtn.disabled = true;
     saveWorkoutBtn.innerHTML = `<span>Workout Saved! Streak: ${newStreak} Days ✓</span>`;

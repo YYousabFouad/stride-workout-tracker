@@ -265,7 +265,15 @@ export const initProgressScreen = function () {
       workout.endTime = Date.now();
       workout.elapsedSeconds = elapsedSeconds;
       workout.distanceKm = Number(distanceKm.toFixed(2));
-      workout.routeCoords = coords;
+
+      // Decimate coordinate points if overly dense to prevent storage quota exhaustion
+      if (Array.isArray(coords) && coords.length > 500) {
+        const step = Math.ceil(coords.length / 500);
+        workout.routeCoords = coords.filter((_, idx) => idx % step === 0);
+      } else {
+        workout.routeCoords = coords;
+      }
+
       workout.finalDuration = formatTime(elapsedSeconds);
       workout.finalDistance = formatDistance(distanceKm);
       workout.efficiencyValue = efficiency.value;

@@ -20,6 +20,7 @@ export const initHistoryScreen = function () {
     const fragment = document.createDocumentFragment();
 
     storedHistory.forEach((item) => {
+      if (!item || typeof item !== "object") return;
       const isRide = item.sport === SPORTS.RIDE;
       const iconPath = isRide
         ? '<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-3 11.5L9 9l3-3 3 4.5 3.5-1"/>'

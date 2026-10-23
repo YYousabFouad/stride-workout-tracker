@@ -1,9 +1,14 @@
 /**
  * Stride Workout Tracker — Modal Controller
- * Manages modal dialogues, backdrop clicks, Escape key, and account creation.
+ * Manages modal dialogues and a local-only athlete profile.
  */
 
-import { STORAGE_KEYS, getStorageItem, setStorageItem } from "../core/storage.js";
+import {
+  STORAGE_KEYS,
+  getStorageItem,
+  sanitizeString,
+  setStorageItem,
+} from "../core/storage.js";
 
 export const initAccountModal = function () {
   const modal = document.getElementById("modal-account");
@@ -12,6 +17,8 @@ export const initAccountModal = function () {
 
   const usernameInput = document.getElementById("input-username");
   const emailInput = document.getElementById("input-email");
+  const titleEl = modal.querySelector(".modal-title");
+  const subtitleEl = modal.querySelector(".modal-subtitle");
 
   const syncAccountNavButton = function () {
     const savedUser = getStorageItem(STORAGE_KEYS.USER);
@@ -34,11 +41,20 @@ export const initAccountModal = function () {
   const openModal = function () {
     const savedUser = getStorageItem(STORAGE_KEYS.USER);
     if (savedUser) {
+      if (titleEl) titleEl.textContent = "Athlete Profile";
+      if (subtitleEl) {
+        subtitleEl.textContent = "Update your profile details";
+      }
       if (usernameInput && savedUser.username) {
         usernameInput.value = savedUser.username;
       }
       if (emailInput && savedUser.email) {
         emailInput.value = savedUser.email;
+      }
+    } else {
+      if (titleEl) titleEl.textContent = "Create Account";
+      if (subtitleEl) {
+        subtitleEl.textContent = "Create an account to start and save workouts";
       }
     }
     modal.classList.add("active");
@@ -50,12 +66,12 @@ export const initAccountModal = function () {
 
   // Close triggers: close button and Cancel button
   modal.querySelectorAll(".modal-close-btn, .btn-outline").forEach((btn) => {
-    btn.addEventListener("click", closeModal);
+    btn.addEventListener("click", () => closeModal(false));
   });
 
   // Close on backdrop click
   modal.addEventListener("click", function (e) {
-    if (e.target === modal) closeModal();
+    if (e.target === modal) closeModal(false);
   });
 
   // Close any active modal on Escape key
@@ -73,14 +89,24 @@ export const initAccountModal = function () {
   const form = document.getElementById("form-create-account");
   const submitBtn = modal.querySelector(".modal-footer .btn-primary");
 
-  const handleAccountCreate = function () {
-    const username = usernameInput ? usernameInput.value.trim() : "";
-    const email = emailInput ? emailInput.value.trim() : "";
+  const handleAccountCreate = async function () {
+    const rawUsername = usernameInput ? usernameInput.value : "";
+    const username = sanitizeString(rawUsername, 50) || "Athlete";
+
+    const rawEmail = emailInput ? emailInput.value.trim() : "";
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(rawEmail) || rawEmail.length > 100) {
+      if (emailInput) emailInput.focus();
+      return;
+    }
+    const email = rawEmail;
+    const existingUser = getStorageItem(STORAGE_KEYS.USER) || {};
 
     const userProfile = {
-      username: username || "Athlete",
-      email: email || "athlete@stride.app",
-      createdAt: Date.now(),
+      username,
+      email,
+      createdAt: existingUser.createdAt || Date.now(),
+      updatedAt: Date.now(),
     };
 
     setStorageItem(STORAGE_KEYS.USER, userProfile);

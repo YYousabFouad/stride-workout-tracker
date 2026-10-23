@@ -8,6 +8,8 @@ import {
   SPORTS,
   STORAGE_KEYS,
   getStorageItem,
+  sanitizeGoal,
+  sanitizeSport,
   sanitizeTarget,
   setStorageItem,
 } from "../core/storage.js";
@@ -59,11 +61,13 @@ export const initPlanWorkoutScreen = function () {
       '.segmented-btn[data-group="goal"].active'
     );
 
-    const sport = activeSportBtn ? activeSportBtn.dataset.value : SPORTS.RUN;
+    const rawSport = activeSportBtn ? activeSportBtn.dataset.value : SPORTS.RUN;
+    const sport = sanitizeSport(rawSport);
     const sportLabel = sport === SPORTS.RIDE ? "Riding" : "Running";
-    const goal = activeGoalBtn
+    const rawGoal = activeGoalBtn
       ? activeGoalBtn.dataset.value
       : GOAL_TYPES.DISTANCE;
+    const goal = sanitizeGoal(rawGoal);
     const targetVal = sanitizeTarget(targetInput.value, goal);
     const targetUnit = goal === GOAL_TYPES.DISTANCE ? "km" : "min";
 

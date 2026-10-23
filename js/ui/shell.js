@@ -181,6 +181,8 @@ const renderAccountModal = function () {
                 id="input-username"
                 class="form-input"
                 placeholder="e.g. Alex Runner"
+                maxlength="50"
+                autocomplete="username"
                 required
               />
             </div>
@@ -192,21 +194,12 @@ const renderAccountModal = function () {
                 id="input-email"
                 class="form-input"
                 placeholder="alex@stride.app"
+                maxlength="100"
+                autocomplete="email"
                 required
               />
             </div>
 
-            <div class="form-group">
-              <label class="form-label" for="input-password">Password</label>
-              <input
-                type="password"
-                id="input-password"
-                class="form-input"
-                placeholder="••••••••••••"
-                minlength="8"
-                required
-              />
-            </div>
           </div>
 
           <div class="modal-footer">

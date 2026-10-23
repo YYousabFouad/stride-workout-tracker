@@ -117,13 +117,44 @@ export const calculateEfficiencyMetric = function (
  */
 export const sanitizeTarget = function (rawValue, goal) {
   const parsed = parseFloat(rawValue);
-  if (isNaN(parsed) || parsed <= 0) {
-    return goal === GOAL_TYPES.DISTANCE ? 5.0 : 30;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return goal === GOAL_TYPES.TIME ? 30 : 5.0;
   }
   // Bounds checking: 0.5km - 100km or 1min - 720min (12 hrs)
-  const min = goal === GOAL_TYPES.DISTANCE ? 0.5 : 1;
-  const max = goal === GOAL_TYPES.DISTANCE ? 100 : 720;
+  const min = goal === GOAL_TYPES.TIME ? 1 : 0.5;
+  const max = goal === GOAL_TYPES.TIME ? 720 : 100;
   return Math.min(Math.max(parsed, min), max);
+};
+
+/**
+ * Whitelist sport against valid domain options
+ * @param {string} rawSport
+ * @returns {'run'|'ride'}
+ */
+export const sanitizeSport = function (rawSport) {
+  return rawSport === SPORTS.RIDE ? SPORTS.RIDE : SPORTS.RUN;
+};
+
+/**
+ * Whitelist workout goal against valid domain options
+ * @param {string} rawGoal
+ * @returns {'distance'|'time'}
+ */
+export const sanitizeGoal = function (rawGoal) {
+  return rawGoal === GOAL_TYPES.TIME ? GOAL_TYPES.TIME : GOAL_TYPES.DISTANCE;
+};
+
+/**
+ * Sanitize text inputs: strip non-printable/control characters and enforce max length
+ * @param {string} str
+ * @param {number} maxLength
+ * @returns {string}
+ */
+export const sanitizeString = function (str, maxLength = 50) {
+  if (typeof str !== "string") return "";
+  // Strip control characters (ASCII 0-31 and 127) to prevent display spoofing & layout distortion
+  const cleaned = str.replace(/[\x00-\x1F\x7F]/g, "").trim();
+  return cleaned.slice(0, maxLength);
 };
 
 /**
@@ -142,7 +173,7 @@ export const getStorageItem = function (key) {
 };
 
 /**
- * Safely write JSON to localStorage
+ * Safely write JSON to localStorage with quota-exceeded mitigation (CWE-400)
  * @param {string} key
  * @param {any} value
  */
@@ -150,6 +181,19 @@ export const setStorageItem = function (key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (err) {
-    console.error(`Error writing ${key} to storage:`, err);
+    console.warn(`Error writing ${key} to storage, attempting recovery:`, err);
+    try {
+      // If quota exceeded, prune older historical logs to preserve active and current state
+      const history = getStorageItem(STORAGE_KEYS.HISTORY);
+      if (Array.isArray(history) && history.length > 10) {
+        localStorage.setItem(
+          STORAGE_KEYS.HISTORY,
+          JSON.stringify(history.slice(0, 10))
+        );
+        localStorage.setItem(key, JSON.stringify(value));
+      }
+    } catch (retryErr) {
+      console.error(`Storage recovery failed for ${key}:`, retryErr);
+    }
   }
 };

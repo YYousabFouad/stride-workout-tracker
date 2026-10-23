@@ -25,7 +25,7 @@ let onRouteUpdateCallback = null;
 
 const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const OSM_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+  '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 const DEFAULT_FALLBACK_COORDS = [40.7128, -74.006]; // Sensible default if no GPS or stored position yet
 const MIN_STEP_DISTANCE_KM = 0.007; // 7m deadband threshold (filters micro-jitter & stationary drift)
 const MAX_ACCEPTABLE_ACCURACY_M = 35; // Discard noisy satellite multipath spikes
@@ -69,10 +69,14 @@ const renderFallbackState = function (container, message) {
     <div class="map-hud-top">
       <div class="gps-badge">
         <span class="gps-indicator-dot"></span>
-        <span>${message}</span>
+        <span class="gps-status-text"></span>
       </div>
     </div>
   `;
+  const textSpan = container.querySelector(".gps-status-text");
+  if (textSpan) {
+    textSpan.textContent = String(message || "");
+  }
 };
 
 const ensureMapInitialized = function (initialCoords) {
