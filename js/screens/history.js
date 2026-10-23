@@ -22,7 +22,7 @@ export const initHistoryScreen = function () {
     Array.isArray(storedHistory) &&
     storedHistory.length > 0
   ) {
-    historyContainer.innerHTML = "";
+    historyContainer.replaceChildren();
     const fragment = document.createDocumentFragment();
 
     storedHistory.forEach((item) => {

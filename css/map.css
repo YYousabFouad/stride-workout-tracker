@@ -60,24 +60,6 @@
   pointer-events: none;
 }
 
-.map-control-btn:active {
-  transform: scale(0.94);
-}
-
-.map-control-btn.is-locating .locate-icon {
-  animation: spinLocate 0.9s linear infinite;
-  color: var(--color-brand-cyan);
-}
-
-@keyframes spinLocate {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
 .gps-badge {
   pointer-events: auto;
   display: inline-flex;
@@ -284,6 +266,24 @@
   border-color: var(--color-brand-cyan);
   color: var(--color-brand-cyan);
   box-shadow: 0 0 12px rgba(0, 217, 245, 0.25);
+}
+
+.map-control-btn:active {
+  transform: scale(0.94);
+}
+
+.map-control-btn.is-locating .locate-icon {
+  animation: spinLocate 0.9s linear infinite;
+  color: var(--color-brand-cyan);
+}
+
+@keyframes spinLocate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .map-control-btn.nav-target-btn {

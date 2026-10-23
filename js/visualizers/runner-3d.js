@@ -25,6 +25,9 @@ export class Runner3D {
     this.stridePhase = 0; // Continuously accumulated phase angle
     this.sport = "run"; // "run" or "ride"
     this.isRide = false;
+    this.animFrameCount = 0;
+    this.lastWidth = 0;
+    this.lastHeight = 0;
 
     this.init();
   }
@@ -473,6 +476,9 @@ export class Runner3D {
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
     if (width > 0 && height > 0) {
+      if (this.lastWidth === width && this.lastHeight === height) return;
+      this.lastWidth = width;
+      this.lastHeight = height;
       this.isMobile = width < 600 || (window.innerWidth && window.innerWidth < 600);
       this.camera.aspect = width / height;
       // Dynamically adjust FOV on mobile so runner stays comfortably framed
@@ -753,38 +759,43 @@ export class Runner3D {
 
     // 8. Vanta Wave Field Dynamic Undulation
     if (this.vantaWaveMesh && this.waveOrigPositions) {
-      const pos = this.vantaWaveMesh.geometry.attributes.position.array;
-      const orig = this.waveOrigPositions;
-      const waveT = elapsed * 0.3 + this.stridePhase * 0.4;
+      // Throttle wave vertex recalculations on mobile or during idle to save CPU/GPU bandwidth
+      const shouldUpdateWave = !this.isMobile || (this.animFrameCount % 2 === 0);
+      if (shouldUpdateWave) {
+        const pos = this.vantaWaveMesh.geometry.attributes.position.array;
+        const orig = this.waveOrigPositions;
+        const waveT = elapsed * 0.3 + this.stridePhase * 0.4;
 
-      const count = pos.length / 3;
-      for (let i = 0; i < count; i++) {
-        const x = orig[i * 3 + 0];
-        const z = orig[i * 3 + 2];
+        const count = pos.length / 3;
+        for (let i = 0; i < count; i++) {
+          const x = orig[i * 3 + 0];
+          const z = orig[i * 3 + 2];
 
-        // Attenuate wave displacement in center so runway remains flush and clean
-        const distFromCenter = Math.abs(x);
-        const waveWeight = Math.min(
-          1.0,
-          Math.max(0.12, (distFromCenter - 2.6) / 5.5)
-        );
+          // Attenuate wave displacement in center so runway remains flush and clean
+          const distFromCenter = Math.abs(x);
+          const waveWeight = Math.min(
+            1.0,
+            Math.max(0.12, (distFromCenter - 2.6) / 5.5)
+          );
 
-        // Multi-frequency compound trigonometric waves flowing towards -Z
-        const wave1 = Math.sin(x * 0.35 + waveT * 1.5);
-        const wave2 = Math.cos(z * 0.22 + waveT * 2.0);
-        const wave3 = Math.sin((x + z) * 0.26 + waveT * 0.85);
+          // Multi-frequency compound trigonometric waves flowing towards -Z
+          const wave1 = Math.sin(x * 0.35 + waveT * 1.5);
+          const wave2 = Math.cos(z * 0.22 + waveT * 2.0);
+          const wave3 = Math.sin((x + z) * 0.26 + waveT * 0.85);
 
-        pos[i * 3 + 1] =
-          orig[i * 3 + 1] +
-          (wave1 * 0.42 + wave2 * 0.38 + wave3 * 0.28) * waveWeight;
+          pos[i * 3 + 1] =
+            orig[i * 3 + 1] +
+            (wave1 * 0.42 + wave2 * 0.38 + wave3 * 0.28) * waveWeight;
+        }
+        this.vantaWaveMesh.geometry.attributes.position.needsUpdate = true;
       }
-      this.vantaWaveMesh.geometry.attributes.position.needsUpdate = true;
     }
   }
 
   render() {
     if (!this.isRunning) return;
 
+    this.animFrameCount = (this.animFrameCount + 1) | 0;
     const delta = Math.min(this.clock.getDelta(), 0.1);
     this.updateAnimation(delta);
 
@@ -833,32 +844,51 @@ export class Runner3D {
     }
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
+      this.resizeObserver = null;
     }
     if (this.visibilityObserver) {
       this.visibilityObserver.disconnect();
+      this.visibilityObserver = null;
     }
     if (this.onPageVisibilityChange) {
       document.removeEventListener("visibilitychange", this.onPageVisibilityChange);
+      this.onPageVisibilityChange = null;
     }
     if (this.scene) {
+      const disposedMats = new Set();
       this.scene.traverse((obj) => {
         if (obj.geometry) {
           obj.geometry.dispose();
         }
         if (obj.material) {
           if (Array.isArray(obj.material)) {
-            obj.material.forEach((m) => m.dispose());
-          } else {
+            obj.material.forEach((m) => {
+              if (m && !disposedMats.has(m)) {
+                disposedMats.add(m);
+                m.dispose();
+              }
+            });
+          } else if (!disposedMats.has(obj.material)) {
+            disposedMats.add(obj.material);
             obj.material.dispose();
           }
         }
       });
+      disposedMats.clear();
+      this.scene = null;
     }
     if (this.renderer && this.renderer.domElement) {
-      this.renderer.domElement.removeEventListener("webglcontextlost", this.onContextLost);
-      this.renderer.domElement.removeEventListener("webglcontextrestored", this.onContextRestored);
+      if (this.onContextLost) {
+        this.renderer.domElement.removeEventListener("webglcontextlost", this.onContextLost);
+      }
+      if (this.onContextRestored) {
+        this.renderer.domElement.removeEventListener("webglcontextrestored", this.onContextRestored);
+      }
       this.renderer.domElement.remove();
       this.renderer.dispose();
+      this.renderer = null;
     }
+    this.camera = null;
+    this.container = null;
   }
 }

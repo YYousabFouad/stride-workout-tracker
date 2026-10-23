@@ -70,7 +70,7 @@ export const initCompleteScreen = function () {
       if (completeMapViewport._leaflet_id) {
         delete completeMapViewport._leaflet_id;
       }
-      completeMapViewport.innerHTML = "";
+      completeMapViewport.replaceChildren();
       summaryMapInstance = L.map("complete-map-viewport", {
         preferCanvas: true,
       }).setView(workout.routeCoords[0], 15);
@@ -278,7 +278,8 @@ export const initCompleteScreen = function () {
   // Guard against duplicate saves on page reload
   if (saveWorkoutBtn && workout && workout.saved) {
     saveWorkoutBtn.disabled = true;
-    saveWorkoutBtn.innerHTML = `<span>Workout Saved! Streak: ${getStreakCount()} Days ✓</span>`;
+    const btnSpan = saveWorkoutBtn.querySelector("span") || saveWorkoutBtn;
+    btnSpan.textContent = `Workout Saved! Streak: ${getStreakCount()} Days ✓`;
   }
 
   let waitingForAccount = false;
@@ -332,7 +333,8 @@ export const initCompleteScreen = function () {
     setStorageItem(STORAGE_KEYS.HISTORY, boundedHistory);
 
     saveWorkoutBtn.disabled = true;
-    saveWorkoutBtn.innerHTML = `<span>Workout Saved! Streak: ${newStreak} Days ✓</span>`;
+    const btnSpan = saveWorkoutBtn.querySelector("span") || saveWorkoutBtn;
+    btnSpan.textContent = `Workout Saved! Streak: ${newStreak} Days ✓`;
   };
 
   if (saveWorkoutBtn) {

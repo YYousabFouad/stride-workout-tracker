@@ -226,12 +226,36 @@ export const initAppShell = function () {
 
   const headerEl = document.querySelector("header.navbar");
   if (headerEl) {
-    headerEl.innerHTML = renderNavbar(currentPage);
+    const desktopLinks = headerEl.querySelectorAll(".view-switcher .view-btn");
+    if (desktopLinks.length > 0) {
+      desktopLinks.forEach((link) => {
+        const href = link.getAttribute("href");
+        if (href === currentPage) {
+          link.classList.add("active");
+        } else {
+          link.classList.remove("active");
+        }
+      });
+    } else {
+      headerEl.innerHTML = renderNavbar(currentPage);
+    }
   }
 
   const mobileNavEl = document.querySelector("nav.mobile-bottom-nav");
   if (mobileNavEl) {
-    mobileNavEl.innerHTML = renderMobileNav(currentPage);
+    const mobileLinks = mobileNavEl.querySelectorAll(".mobile-nav-item");
+    if (mobileLinks.length > 0) {
+      mobileLinks.forEach((link) => {
+        const href = link.getAttribute("href");
+        if (href === currentPage) {
+          link.classList.add("active");
+        } else {
+          link.classList.remove("active");
+        }
+      });
+    } else {
+      mobileNavEl.innerHTML = renderMobileNav(currentPage);
+    }
   }
 
   let accountModalEl = document.getElementById("modal-account");
@@ -243,5 +267,7 @@ export const initAppShell = function () {
     accountModalEl.setAttribute("aria-modal", "true");
     document.body.appendChild(accountModalEl);
   }
-  accountModalEl.innerHTML = renderAccountModal();
+  if (!accountModalEl.querySelector(".modal-dialog")) {
+    accountModalEl.innerHTML = renderAccountModal();
+  }
 };

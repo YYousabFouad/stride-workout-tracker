@@ -334,9 +334,9 @@ export const showNavToast = function (title, subtitle) {
     if (subEl && subtitle) subEl.textContent = subtitle;
 
     toast.style.display = "flex";
-    // Force CSS reflow to ensure smooth transition
-    void toast.offsetHeight;
-    toast.classList.add("visible");
+    requestAnimationFrame(() => {
+      toast.classList.add("visible");
+    });
   });
 
   // Dissolve message automatically after a few moments (3.5s) so map and road remain clear
@@ -1068,6 +1068,14 @@ const recordCoordinate = function (
       // of each accepted GPS step.
       totalTrackedDistanceKm += rawStepKm;
       routeCoords.push(smoothedPoint);
+
+      // Decimate coordinates if excessively large to keep Leaflet polyline rendering smooth
+      if (routeCoords.length > 600) {
+        routeCoords = routeCoords.filter(
+          (_, idx) =>
+            idx === 0 || idx === routeCoords.length - 1 || idx % 2 === 0
+        );
+      }
     }
   }
 

@@ -177,30 +177,40 @@ export const safeJsonParse = function (raw) {
 };
 
 /**
- * Safely parse JSON from localStorage with prototype pollution protection
+ * In-memory fallback map for environments where localStorage is blocked (e.g. strict private browsing)
+ */
+const memoryStorageFallback = new Map();
+
+/**
+ * Safely parse JSON from localStorage with prototype pollution protection and memory fallback
  * @param {string} key
  * @returns {any|null}
  */
 export const getStorageItem = function (key) {
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? safeJsonParse(raw) : null;
+    const raw =
+      typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
+    return raw ? safeJsonParse(raw) : (memoryStorageFallback.get(key) ?? null);
   } catch (err) {
-    console.error(`Error reading ${key} from storage:`, err);
-    return null;
+    console.warn(`Storage access restricted for ${key}, falling back to memory:`, err);
+    return memoryStorageFallback.get(key) ?? null;
   }
 };
 
 /**
- * Safely write JSON to localStorage with quota-exceeded mitigation (CWE-400)
+ * Safely write JSON to localStorage with quota-exceeded mitigation and memory fallback
  * @param {string} key
  * @param {any} value
  */
 export const setStorageItem = function (key, value) {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+    memoryStorageFallback.set(key, value);
   } catch (err) {
-    console.warn(`Error writing ${key} to storage, attempting recovery:`, err);
+    memoryStorageFallback.set(key, value);
+    console.warn(`Storage write restricted for ${key}, using in-memory state:`, err);
     try {
       // If quota exceeded, prune older historical logs to preserve active and current state
       const history = getStorageItem(STORAGE_KEYS.HISTORY);
@@ -211,8 +221,8 @@ export const setStorageItem = function (key, value) {
         );
         localStorage.setItem(key, JSON.stringify(value));
       }
-    } catch (retryErr) {
-      console.error(`Storage recovery failed for ${key}:`, retryErr);
+    } catch {
+      // Memory fallback is safely preserved
     }
   }
 };
