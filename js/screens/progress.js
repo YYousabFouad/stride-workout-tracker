@@ -158,7 +158,28 @@ export const initProgressScreen = function () {
     }
   };
 
-  startTelemetry();
+  // Register unload cleanup unconditionally to ensure WebGL context and watchers are always released
+  let lastStorageSaveTime = 0;
+  const STORAGE_SAVE_THROTTLE_MS = 3000;
+
+  const flushStorageSave = () => {
+    if (workout && workout.status === "in_progress") {
+      setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
+      lastStorageSaveTime = Date.now();
+    }
+  };
+
+  window.addEventListener("beforeunload", () => {
+    flushStorageSave();
+    if (workoutTimerInterval) clearInterval(workoutTimerInterval);
+    stopTelemetry();
+    stopRouteTracking();
+    destroyMap();
+    if (runner3dInstance) {
+      runner3dInstance.destroy();
+      runner3dInstance = null;
+    }
+  });
 
   // =========================================================================
   // 2. Telemetry and Workout State
@@ -176,6 +197,8 @@ export const initProgressScreen = function () {
     }
     return;
   }
+
+  startTelemetry();
 
   // Populate Meta Tag & Hint
   if (metaTag) {
@@ -212,9 +235,18 @@ export const initProgressScreen = function () {
     initialDistanceKm: gpsDistanceKm,
     onUpdate: ({ coords, distanceKm }) => {
       gpsDistanceKm = distanceKm;
-      workout.routeCoords = coords;
+      // Cap stored routeCoords to max 500 decimated points to mitigate storage exhaustion (CWE-400)
+      if (Array.isArray(coords) && coords.length > 500) {
+        const step = Math.ceil(coords.length / 500);
+        workout.routeCoords = coords.filter((_, idx) => idx % step === 0);
+      } else {
+        workout.routeCoords = coords;
+      }
       workout.gpsDistanceKm = Number(distanceKm.toFixed(3));
-      setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
+      const now = Date.now();
+      if (now - lastStorageSaveTime >= STORAGE_SAVE_THROTTLE_MS) {
+        flushStorageSave();
+      }
       updateWorkoutLoop();
     },
   });
@@ -304,16 +336,4 @@ export const initProgressScreen = function () {
       window.location.href = "complete.html";
     });
   }
-
-  // Cleanup on unload to prevent WebGL context and geolocation watcher leaks
-  window.addEventListener("beforeunload", () => {
-    if (workoutTimerInterval) clearInterval(workoutTimerInterval);
-    stopTelemetry();
-    stopRouteTracking();
-    destroyMap();
-    if (runner3dInstance) {
-      runner3dInstance.destroy();
-      runner3dInstance = null;
-    }
-  });
 };

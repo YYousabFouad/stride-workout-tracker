@@ -3,7 +3,18 @@
  * Handles screen switching across anchor links and buttons reliably.
  */
 
+const ALLOWED_PAGES = new Set([
+  "index.html",
+  "progress.html",
+  "complete.html",
+  "history.html",
+]);
+
+let isNavInitialized = false;
+
 export const initNavigation = function () {
+  if (isNavInitialized) return;
+  isNavInitialized = true;
   const routesByTitle = {
     "1. Plan Workout": "index.html",
     "2. In Progress": "progress.html",
@@ -32,15 +43,31 @@ export const initNavigation = function () {
 
     if (!targetPage) return;
 
+    let cleanTarget = targetPage;
+    if (cleanTarget.includes("/")) {
+      cleanTarget = cleanTarget.split("/").pop();
+    }
+    if (cleanTarget.includes("?")) {
+      cleanTarget = cleanTarget.split("?")[0];
+    }
+    if (cleanTarget.includes("#")) {
+      cleanTarget = cleanTarget.split("#")[0];
+    }
+
+    if (!ALLOWED_PAGES.has(cleanTarget)) {
+      e.preventDefault();
+      return;
+    }
+
     const currentPath =
       window.location.pathname.split("/").pop() || "index.html";
-    if (currentPath === targetPage) {
+    if (currentPath === cleanTarget) {
       e.preventDefault();
       return;
     }
 
     if (!href) {
-      window.location.href = targetPage;
+      window.location.href = cleanTarget;
     }
   });
 };

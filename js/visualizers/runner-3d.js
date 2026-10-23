@@ -538,7 +538,10 @@ export class Runner3D {
     }
 
     if (animated && window.anime) {
-      window.anime({
+      if (this.activeCameraAnim && typeof this.activeCameraAnim.pause === "function") {
+        this.activeCameraAnim.pause();
+      }
+      this.activeCameraAnim = window.anime({
         targets: this.camera.position,
         x: target.x,
         y: target.y,
@@ -546,7 +549,9 @@ export class Runner3D {
         duration: 800,
         easing: "easeOutCubic",
         update: () => {
-          this.camera.lookAt(lookTarget.x, lookTarget.y, lookTarget.z);
+          if (this.camera) {
+            this.camera.lookAt(lookTarget.x, lookTarget.y, lookTarget.z);
+          }
         },
       });
     } else {
@@ -736,6 +741,15 @@ export class Runner3D {
 
   destroy() {
     this.pause(true);
+    if (this.clock) {
+      try {
+        this.clock.stop();
+      } catch {}
+    }
+    if (this.activeCameraAnim && typeof this.activeCameraAnim.pause === "function") {
+      this.activeCameraAnim.pause();
+      this.activeCameraAnim = null;
+    }
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
     }

@@ -27,6 +27,7 @@ let locationAccuracyCircle = null;
 let navGuidePolyline = null;
 let navGuideCasingPolyline = null;
 let isNavigatingToArrow = false;
+let activeOsrmAbortController = null;
 
 const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const OSM_ATTRIBUTION =
@@ -174,10 +175,11 @@ export const getClickArrowMarker = function () {
   return clickArrowMarker;
 };
 
-export const clearClickArrowMarker = function () {
-  clearNavigation(map);
-  if (map && clickArrowMarker) {
-    map.removeLayer(clickArrowMarker);
+export const clearClickArrowMarker = function (targetMap = map) {
+  const activeMap = targetMap || map;
+  clearNavigation(activeMap);
+  if (activeMap && clickArrowMarker) {
+    activeMap.removeLayer(clickArrowMarker);
   }
   clickArrowMarker = null;
 
@@ -236,14 +238,23 @@ export const getCompassDirection = function (bearing) {
  * Fetch pedestrian route from OpenStreetMap Routing Machine (OSRM)
  * @param {[number, number]} start [lat, lon]
  * @param {[number, number]} dest [lat, lon]
+ * @param {AbortSignal|null} [externalSignal=null]
  * @returns {Promise<{ coords: [number, number][], distanceMeters: number, durationSec: number }>}
  */
-export const fetchOsrmRoute = async function (start, dest) {
+export const fetchOsrmRoute = async function (start, dest, externalSignal = null) {
   const [startLat, startLon] = start;
   const [destLat, destLon] = dest;
 
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timeoutId = controller ? setTimeout(() => controller.abort(), 3500) : null;
+
+  if (externalSignal && controller) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+  }
 
   try {
     const url = `https://router.project-osrm.org/route/v1/foot/${startLon},${startLat};${destLon},${destLat}?overview=full&geometries=geojson`;
@@ -274,6 +285,10 @@ export const isNavigating = function () {
 };
 
 export const clearNavigation = function (targetMap = map) {
+  if (activeOsrmAbortController) {
+    activeOsrmAbortController.abort();
+    activeOsrmAbortController = null;
+  }
   isNavigatingToArrow = false;
   const activeMap = targetMap || map;
 
@@ -332,6 +347,15 @@ export const navigateToArrow = async function (targetMap = map) {
   }
 
   isNavigatingToArrow = true;
+
+  if (activeOsrmAbortController) {
+    activeOsrmAbortController.abort();
+  }
+  activeOsrmAbortController =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const currentSignal = activeOsrmAbortController
+    ? activeOsrmAbortController.signal
+    : null;
 
   // Update navigate button states to active
   const navBtns = [
@@ -426,8 +450,8 @@ export const navigateToArrow = async function (targetMap = map) {
 
   // 2. Fetch precision street routing from OSRM
   try {
-    const route = await fetchOsrmRoute(start, dest);
-    if (!isNavigatingToArrow) return;
+    const route = await fetchOsrmRoute(start, dest, currentSignal);
+    if (!isNavigatingToArrow || (currentSignal && currentSignal.aborted)) return;
     renderGuidePolyline(route.coords);
     const roadDistStr =
       route.distanceMeters < 1000
@@ -440,6 +464,7 @@ export const navigateToArrow = async function (targetMap = map) {
       bearing
     );
   } catch {
+    if (currentSignal && currentSignal.aborted) return;
     if (!isNavigatingToArrow) return;
     // Graceful offline fallback: keep direct guidance line
     renderGuidePolyline([start, dest]);
@@ -524,10 +549,21 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
       btn.removeAttribute("aria-busy");
     });
 
-    console.warn("Geolocation fix unavailable, displaying stored position:", err);
+    const isTimeout = err && err.code === 3;
+    const isDenied = err && err.code === 1;
+    const reasonMsg = isDenied
+      ? "Location permission denied"
+      : isTimeout
+        ? "GPS fix timed out"
+        : "GPS unavailable";
+
+    console.info(
+      `Notice: ${reasonMsg}, displaying stored position:`,
+      err ? err.message || err : ""
+    );
     const fallbackCoords = getStoredLocation();
 
-    updateGpsStatusBadge(false, "GPS unavailable · Showing last known position");
+    updateGpsStatusBadge(false, `${reasonMsg} · Showing last known position`);
 
     if (activeMap) {
       if (typeof activeMap.flyTo === "function") {
@@ -558,6 +594,7 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
   };
 
   if (typeof navigator !== "undefined" && navigator.geolocation) {
+    // Attempt 1: High accuracy GPS fix (ideal for mobile devices & outdoors)
     navigator.geolocation.getCurrentPosition(
       function (pos) {
         handleSuccess(
@@ -566,12 +603,33 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
         );
       },
       function (err) {
+        // Attempt 2: If high-accuracy timed out (code 3) or unavailable (code 2),
+        // fallback to standard network/Wi-Fi/IP location (vital for laptops/desktops and indoors)
+        if (err && (err.code === 3 || err.code === 2)) {
+          navigator.geolocation.getCurrentPosition(
+            function (coarsePos) {
+              handleSuccess(
+                [coarsePos.coords.latitude, coarsePos.coords.longitude],
+                coarsePos.coords.accuracy || 0
+              );
+            },
+            function () {
+              handleError(err);
+            },
+            {
+              enableHighAccuracy: false,
+              timeout: 6000,
+              maximumAge: 120000,
+            }
+          );
+          return;
+        }
         handleError(err);
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 5000,
+        timeout: 6000,
+        maximumAge: 10000,
       }
     );
   } else {
@@ -851,6 +909,21 @@ const recordCoordinate = function (coords, accuracy = 0) {
     const dest = [targetLatLng.lat, targetLatLng.lng];
     const remainingKm = calculateHaversineKm(coords, dest);
 
+    // Keep navigation guidance polyline glued to the moving runner
+    if (navGuidePolyline && typeof navGuidePolyline.getLatLngs === "function") {
+      const currentPoints = navGuidePolyline.getLatLngs();
+      if (Array.isArray(currentPoints) && currentPoints.length > 1) {
+        currentPoints[0] = L.latLng ? L.latLng(coords[0], coords[1]) : coords;
+        navGuidePolyline.setLatLngs(currentPoints);
+        if (
+          navGuideCasingPolyline &&
+          typeof navGuideCasingPolyline.setLatLngs === "function"
+        ) {
+          navGuideCasingPolyline.setLatLngs(currentPoints);
+        }
+      }
+    }
+
     if (remainingKm <= 0.015) {
       const banners = [
         document.getElementById("map-directions-banner"),
@@ -1005,10 +1078,28 @@ export const loadMap = function () {
  * Clean up active Leaflet map instance and tracking state
  */
 export const destroyMap = function () {
+  if (activeOsrmAbortController) {
+    activeOsrmAbortController.abort();
+    activeOsrmAbortController = null;
+  }
   clearNavigation(map);
   stopRouteTracking();
   if (map) {
     try {
+      [
+        originMarker,
+        currentMarker,
+        locationAccuracyCircle,
+        clickArrowMarker,
+        routePolyline,
+        routeCasingPolyline,
+      ].forEach((layer) => {
+        if (layer && typeof map.removeLayer === "function") {
+          try {
+            map.removeLayer(layer);
+          } catch {}
+        }
+      });
       map.remove();
     } catch (err) {
       // Silently ignore teardown errors

@@ -17,6 +17,7 @@ export const initHistoryScreen = function () {
     Array.isArray(storedHistory) &&
     storedHistory.length > 0
   ) {
+    historyContainer.innerHTML = "";
     const fragment = document.createDocumentFragment();
 
     storedHistory.forEach((item) => {
@@ -52,6 +53,6 @@ export const initHistoryScreen = function () {
       fragment.appendChild(entry);
     });
 
-    historyContainer.prepend(fragment);
+    historyContainer.appendChild(fragment);
   }
 };

@@ -10,6 +10,8 @@ import {
   setStorageItem,
 } from "../core/storage.js";
 
+let isAccountModalInitialized = false;
+
 export const initAccountModal = function () {
   const modal = document.getElementById("modal-account");
   const openBtn = document.getElementById("btn-open-account");
@@ -30,6 +32,9 @@ export const initAccountModal = function () {
   };
 
   syncAccountNavButton();
+
+  if (isAccountModalInitialized) return;
+  isAccountModalInitialized = true;
 
   const closeModal = function (accountCreated = false) {
     modal.classList.remove("active");
