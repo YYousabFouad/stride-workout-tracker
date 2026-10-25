@@ -16,7 +16,9 @@
   z-index: 1000;
   opacity: 0;
   visibility: hidden;
-  transition: opacity var(--transition-normal), visibility var(--transition-normal);
+  transition:
+    opacity var(--transition-normal),
+    visibility var(--transition-normal);
 }
 
 .modal-overlay.active,
@@ -196,7 +198,9 @@
   }
 
   .modal-footer {
-    padding-bottom: max(var(--space-6), env(safe-area-inset-bottom, var(--space-6)));
+    padding-bottom: max(
+      var(--space-6),
+      env(safe-area-inset-bottom, var(--space-6))
+    );
   }
 }
-

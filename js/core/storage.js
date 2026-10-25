@@ -68,12 +68,12 @@ export const formatDistance = function (distanceKm) {
   return `${safeKm.toFixed(1)} km`;
 };
 
-const pad2 = function (value) {
-  return String(value).padStart(2, "0");
-};
-
 const startOfLocalDay = function (date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  ).getTime();
 };
 
 /**
@@ -93,7 +93,7 @@ export const formatHistoryDate = function (startedAtMs) {
     minute: "2-digit",
   });
   const dayDelta = Math.round(
-    (startOfLocalDay(new Date()) - startOfLocalDay(when)) / 86400000
+    (startOfLocalDay(new Date()) - startOfLocalDay(when)) / 86400000,
   );
 
   if (dayDelta === 0) return `Today · ${time}`;
@@ -143,13 +143,14 @@ export const calculateHaversineKm = function (coordA, coordB) {
 export const calculateEfficiencyMetric = function (
   distanceKm,
   elapsedSeconds,
-  sport
+  sport,
 ) {
   const safeKm = Math.max(0, Number(distanceKm) || 0);
   const safeSec = Math.max(0, Number(elapsedSeconds) || 0);
 
   if (sport === SPORTS.RIDE) {
-    const speedKmh = safeSec > 0 ? (safeKm / (safeSec / 3600)).toFixed(1) : "0.0";
+    const speedKmh =
+      safeSec > 0 ? (safeKm / (safeSec / 3600)).toFixed(1) : "0.0";
     return { value: speedKmh, label: "Speed (km/h)" };
   }
 
@@ -219,7 +220,10 @@ const isValidCoordinate = function (coordinate) {
  * @param {number} [maxPoints]
  * @returns {any[]}
  */
-export const decimateRoute = function (coordinates, maxPoints = ROUTE_POINT_LIMIT) {
+export const decimateRoute = function (
+  coordinates,
+  maxPoints = ROUTE_POINT_LIMIT,
+) {
   if (!Array.isArray(coordinates)) return [];
   const limit = Math.max(2, Math.floor(Number(maxPoints) || ROUTE_POINT_LIMIT));
   if (coordinates.length <= limit) return coordinates;
@@ -244,7 +248,8 @@ const sanitizeWorkout = function (value, key) {
 
   const status = value.status;
   if (status !== "in_progress" && status !== "complete") return null;
-  if (key === STORAGE_KEYS.COMPLETED_WORKOUT && status !== "complete") return null;
+  if (key === STORAGE_KEYS.COMPLETED_WORKOUT && status !== "complete")
+    return null;
 
   const goal = sanitizeGoal(value.goal);
   return {
@@ -278,7 +283,9 @@ const toText = function (value) {
  * @returns {number|null}
  */
 const parseDistanceLabel = function (label) {
-  const match = toText(label).trim().match(/^(\d+(?:\.\d+)?)\s*km$/i);
+  const match = toText(label)
+    .trim()
+    .match(/^(\d+(?:\.\d+)?)\s*km$/i);
   if (!match) return null;
   const distanceKm = Number(match[1]);
   return Number.isFinite(distanceKm) ? distanceKm : null;
@@ -290,7 +297,9 @@ const parseDistanceLabel = function (label) {
  * @returns {number|null}
  */
 const parseDurationLabel = function (label) {
-  const match = toText(label).trim().match(/^(\d{1,3}):([0-5]\d)(?::([0-5]\d))?$/);
+  const match = toText(label)
+    .trim()
+    .match(/^(\d{1,3}):([0-5]\d)(?::([0-5]\d))?$/);
   if (!match) return null;
   const elapsedSeconds = match[3]
     ? Number(match[3]) + Number(match[2]) * 60 + Number(match[1]) * 3600
@@ -330,7 +339,10 @@ const sanitizeHistoryItem = function (item) {
     sport: sanitizeSport(item.sport),
     startedAtMs,
     // Empty when `startedAtMs` is known: the label is derived at render time.
-    dateLabel: startedAtMs === null ? sanitizeString(toText(item.dateLabel ?? item.date), 40) : "",
+    dateLabel:
+      startedAtMs === null
+        ? sanitizeString(toText(item.dateLabel ?? item.date), 40)
+        : "",
     distanceKm,
     elapsedSeconds,
     efficiencyValue: sanitizeString(toText(item.efficiencyValue), 16),
@@ -341,10 +353,7 @@ const sanitizeHistoryItem = function (item) {
 /** Bound, validate, and normalize the whole history array on every read. */
 const sanitizeHistory = function (value) {
   if (!Array.isArray(value)) return [];
-  return value
-    .map(sanitizeHistoryItem)
-    .filter(Boolean)
-    .slice(0, HISTORY_LIMIT);
+  return value.map(sanitizeHistoryItem).filter(Boolean).slice(0, HISTORY_LIMIT);
 };
 
 const validateStoredValue = function (key, value) {
@@ -372,6 +381,7 @@ const validateStoredValue = function (key, value) {
 export const sanitizeString = function (str, maxLength = 50) {
   if (typeof str !== "string") return "";
   // Strip control characters (ASCII 0-31 and 127) to prevent display spoofing & layout distortion
+  // eslint-disable-next-line no-control-regex -- control characters are exactly what must be stripped
   const cleaned = str.replace(/[\x00-\x1F\x7F]/g, "").trim();
   return cleaned.slice(0, maxLength);
 };
@@ -421,7 +431,10 @@ export const getStorageItem = function (key) {
     }
     return validateStoredValue(key, memoryStorageFallback.get(key) ?? null);
   } catch (err) {
-    console.warn(`Storage access restricted for ${key}, falling back to memory:`, err);
+    console.warn(
+      `Storage access restricted for ${key}, falling back to memory:`,
+      err,
+    );
     return validateStoredValue(key, memoryStorageFallback.get(key) ?? null);
   }
 };
@@ -441,14 +454,17 @@ export const setStorageItem = function (key, value) {
   } catch (err) {
     memoryStorageFallback.set(key, value);
     failedStorageWrites.add(key);
-    console.warn(`Storage write restricted for ${key}, using in-memory state:`, err);
+    console.warn(
+      `Storage write restricted for ${key}, using in-memory state:`,
+      err,
+    );
     try {
       // If quota exceeded, prune older historical logs to preserve active and current state
       const history = getStorageItem(STORAGE_KEYS.HISTORY);
       if (Array.isArray(history) && history.length > 10) {
         localStorage.setItem(
           STORAGE_KEYS.HISTORY,
-          JSON.stringify(history.slice(0, 10))
+          JSON.stringify(history.slice(0, 10)),
         );
         localStorage.setItem(key, JSON.stringify(value));
         failedStorageWrites.delete(key);

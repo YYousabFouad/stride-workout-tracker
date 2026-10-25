@@ -55,7 +55,12 @@ body {
 }
 
 /* Headings */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   color: var(--color-text-primary);
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-tight);
@@ -90,7 +95,10 @@ a:hover {
   color: var(--color-brand-primary-hover);
 }
 
-button, input, select, textarea {
+button,
+input,
+select,
+textarea {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
@@ -102,7 +110,8 @@ button {
   background: none;
 }
 
-img, svg {
+img,
+svg {
   display: block;
   max-width: 100%;
 }
@@ -121,7 +130,8 @@ img, svg {
 }
 
 @keyframes liveDot {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }

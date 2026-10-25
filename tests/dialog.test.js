@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { createDialog } from "../js/ui/dialog.js";
 
-const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+const originalDocument = Object.getOwnPropertyDescriptor(
+  globalThis,
+  "document",
+);
 const originalHTMLElement = Object.getOwnPropertyDescriptor(
   globalThis,
-  "HTMLElement"
+  "HTMLElement",
 );
 
 class FakeClassList {

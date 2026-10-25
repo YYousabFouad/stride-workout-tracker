@@ -3,13 +3,13 @@
  * Aggregates all modular style layers and utility helpers
  */
 
-@import './variables.css';
-@import './base.css';
-@import './layout.css';
-@import './components.css';
-@import './map.css';
-@import './modal.css';
-@import './runner-3d.css';
+@import "./variables.css";
+@import "./base.css";
+@import "./layout.css";
+@import "./components.css";
+@import "./map.css";
+@import "./modal.css";
+@import "./runner-3d.css";
 
 /* ==========================================================================
    Utility Classes

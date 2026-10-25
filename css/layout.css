@@ -224,7 +224,9 @@
 .mobile-nav-item svg {
   width: 20px;
   height: 20px;
-  transition: transform var(--transition-fast), color var(--transition-fast);
+  transition:
+    transform var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .mobile-nav-item:hover,
@@ -340,4 +342,3 @@
     font-size: var(--font-size-lg);
   }
 }
-

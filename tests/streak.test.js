@@ -6,10 +6,13 @@ import {
   setStorageItem,
 } from "../js/core/storage.js";
 
-const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+const originalDocument = Object.getOwnPropertyDescriptor(
+  globalThis,
+  "document",
+);
 const originalLocalStorage = Object.getOwnPropertyDescriptor(
   globalThis,
-  "localStorage"
+  "localStorage",
 );
 
 // `incrementStreak` refreshes the DOM badge; a minimal stub is enough to run it.
@@ -135,7 +138,7 @@ test("the first saved workout starts a streak at 1", async () => {
   assert.equal(getStorageItem(STORAGE_KEYS.STREAK), 1);
   assert.equal(
     getStorageItem(STORAGE_KEYS.STREAK_LAST_ACTIVITY),
-    dayKeyFromToday(0)
+    dayKeyFromToday(0),
   );
 });
 
@@ -153,7 +156,7 @@ test("extends an unbroken chain from the previous day", async () => {
   assert.equal(getStorageItem(STORAGE_KEYS.STREAK), 6);
   assert.equal(
     getStorageItem(STORAGE_KEYS.STREAK_LAST_ACTIVITY),
-    dayKeyFromToday(0)
+    dayKeyFromToday(0),
   );
 });
 

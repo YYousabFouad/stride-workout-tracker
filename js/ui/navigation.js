@@ -36,7 +36,7 @@ export const initNavigation = function () {
     const href = navBtn.getAttribute("href");
     const btnText = navBtn.textContent.trim();
     const allBtns = Array.from(
-      document.querySelectorAll(".view-switcher .view-btn")
+      document.querySelectorAll(".view-switcher .view-btn"),
     );
     const btnIndex = allBtns.indexOf(navBtn);
     const targetPage = href || routesByTitle[btnText] || routeList[btnIndex];

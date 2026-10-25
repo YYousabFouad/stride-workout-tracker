@@ -22,7 +22,7 @@ test("every screen opens with a skip link and a focusable main landmark", async 
 test("plan segments expose radiogroup semantics with a roving tab stop", async () => {
   const html = await read("index.html");
   const buttons = (html.match(/<button[\s\S]*?<\/button>/g) || []).filter(
-    (button) => button.includes("data-group=")
+    (button) => button.includes("data-group="),
   );
 
   assert.equal((html.match(/role="radiogroup"/g) || []).length, 2);

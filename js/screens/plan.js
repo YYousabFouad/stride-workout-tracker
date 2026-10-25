@@ -80,7 +80,7 @@ export const initPlanWorkoutScreen = function () {
 
     const buttons = Array.from(
       btn.closest(".segmented-control")?.querySelectorAll(".segmented-btn") ||
-        []
+        [],
     );
     if (buttons.length === 0) return;
 
@@ -106,10 +106,10 @@ export const initPlanWorkoutScreen = function () {
 
   const handleStartWorkout = function () {
     const activeSportBtn = workoutForm.querySelector(
-      '.segmented-btn[data-group="sport"].active'
+      '.segmented-btn[data-group="sport"].active',
     );
     const activeGoalBtn = workoutForm.querySelector(
-      '.segmented-btn[data-group="goal"].active'
+      '.segmented-btn[data-group="goal"].active',
     );
 
     const rawSport = activeSportBtn ? activeSportBtn.dataset.value : SPORTS.RUN;

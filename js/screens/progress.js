@@ -255,7 +255,7 @@ export const initProgressScreen = function () {
     const now = Date.now();
     const cadence = Math.round(baseCadence + Math.sin(now / 3500) * 3);
     const speed = parseFloat(
-      (baseSpeed + Math.cos(now / 4200) * 0.3).toFixed(1)
+      (baseSpeed + Math.cos(now / 4200) * 0.3).toFixed(1),
     );
 
     updateMotionDisplay(true, speed, cadence);
@@ -328,7 +328,8 @@ export const initProgressScreen = function () {
     }
 
     const latest = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
-    const isSameSession = Boolean(latest) && latest.startTime === workout.startTime;
+    const isSameSession =
+      Boolean(latest) && latest.startTime === workout.startTime;
     // Routine throttled writes from another tab tracking this same session.
     if (isSameSession && latest.status === "in_progress") return;
 
@@ -344,7 +345,8 @@ export const initProgressScreen = function () {
 
     // A session still running elsewhere: adopt it by reloading.
     // One that finished: show its summary.
-    window.location.href = latest?.status === "in_progress" ? "progress.html" : "complete.html";
+    window.location.href =
+      latest?.status === "in_progress" ? "progress.html" : "complete.html";
   };
 
   window.addEventListener("pagehide", handlePageHide);
@@ -448,7 +450,7 @@ export const initProgressScreen = function () {
   const computeLiveMetrics = function () {
     const elapsedSeconds = Math.max(
       0,
-      Math.floor((Date.now() - workout.startTime) / 1000)
+      Math.floor((Date.now() - workout.startTime) / 1000),
     );
     // Distance goals must reflect measured GPS movement. A speed estimate here
     // can otherwise complete a workout even when location access is unavailable.
@@ -507,7 +509,7 @@ export const initProgressScreen = function () {
       const efficiency = calculateEfficiencyMetric(
         distanceKm,
         elapsedSeconds,
-        workout.sport
+        workout.sport,
       );
 
       workout.endTime = Date.now();

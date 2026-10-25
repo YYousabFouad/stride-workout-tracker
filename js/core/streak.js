@@ -76,7 +76,7 @@ export const updateStreakDisplay = function () {
 
   // Sync current streak card on Plan screen
   const planStreakEl = document.querySelector(
-    "#view-plan .streak-number-display"
+    "#view-plan .streak-number-display",
   );
   if (planStreakEl) {
     planStreakEl.textContent = `${streak} days`;
@@ -84,15 +84,19 @@ export const updateStreakDisplay = function () {
 
   // Sync potential streak card on Complete screen
   const completeStreakEl = document.querySelector(
-    "#view-complete .streak-number-display"
+    "#view-complete .streak-number-display",
   );
   const completeDescEl = document.querySelector(
-    "#view-complete .streak-description"
+    "#view-complete .streak-description",
   );
   if (completeStreakEl) {
     const workout = getCurrentWorkout();
     const alreadySaved = Boolean(workout?.saved);
-    const targetStreak = workout ? (alreadySaved ? streak : streak + 1) : streak;
+    const targetStreak = workout
+      ? alreadySaved
+        ? streak
+        : streak + 1
+      : streak;
     completeStreakEl.textContent = `${targetStreak} days`;
     if (completeDescEl) {
       completeDescEl.textContent = !workout

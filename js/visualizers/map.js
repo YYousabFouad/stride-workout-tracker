@@ -121,8 +121,9 @@ export const createArrowIcon = function () {
 export const setOrMoveArrowMarker = function (targetMap, latlng) {
   if (!targetMap || !latlng || typeof L === "undefined") return null;
 
-  const normalized =
-    Array.isArray(latlng) ? L.latLng(latlng[0], latlng[1]) : latlng;
+  const normalized = Array.isArray(latlng)
+    ? L.latLng(latlng[0], latlng[1])
+    : latlng;
 
   if (!clickArrowMarker) {
     clickArrowMarker = L.marker(normalized, {
@@ -275,8 +276,9 @@ export const fetchOsrmRoute = async function (
 
   const controller =
     typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timeoutId =
-    controller ? setTimeout(() => controller.abort(), 3500) : null;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), 3500)
+    : null;
 
   const handleExternalAbort = () => {
     if (controller) controller.abort();
@@ -445,7 +447,7 @@ export const navigateToArrow = async function (targetMap = map) {
   const dest = [targetLatLng.lat, targetLatLng.lng];
 
   // Determine current athlete position
-  let start = null;
+  let start;
   if (currentMarker) {
     const cll = currentMarker.getLatLng();
     start = [cll.lat, cll.lng];
@@ -462,8 +464,9 @@ export const navigateToArrow = async function (targetMap = map) {
   }
   activeOsrmAbortController =
     typeof AbortController !== "undefined" ? new AbortController() : null;
-  const currentSignal =
-    activeOsrmAbortController ? activeOsrmAbortController.signal : null;
+  const currentSignal = activeOsrmAbortController
+    ? activeOsrmAbortController.signal
+    : null;
 
   // Mark HUD headers as active navigation so mobile screens dock cleanly at top without blocking road
   const hudContainers = [
@@ -581,9 +584,9 @@ export const navigateToArrow = async function (targetMap = map) {
       return;
     renderGuidePolyline(route.coords);
     const roadDistStr =
-      route.distanceMeters < 1000 ?
-        `${Math.round(route.distanceMeters)} m`
-      : `${(route.distanceMeters / 1000).toFixed(1)} km`;
+      route.distanceMeters < 1000
+        ? `${Math.round(route.distanceMeters)} m`
+        : `${(route.distanceMeters / 1000).toFixed(1)} km`;
     const roadMins = Math.max(1, Math.round(route.durationSec / 60));
     updateBannerUI(
       `Head ${compass} · ${roadDistStr}`,
@@ -686,10 +689,11 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
 
     const isTimeout = err && err.code === 3;
     const isDenied = err && err.code === 1;
-    const reasonMsg =
-      isDenied ? "Location permission denied"
-      : isTimeout ? "GPS fix timed out"
-      : "GPS unavailable";
+    const reasonMsg = isDenied
+      ? "Location permission denied"
+      : isTimeout
+        ? "GPS fix timed out"
+        : "GPS unavailable";
 
     console.info(
       `Notice: ${reasonMsg}, displaying stored position:`,
@@ -1022,9 +1026,9 @@ const recordCoordinate = function (
     measuredSpeed = 0;
   } else {
     measuredSpeed =
-      currentGpsSpeedKmh > 0 ?
-        currentGpsSpeedKmh * 0.35 + measuredSpeed * 0.65
-      : measuredSpeed;
+      currentGpsSpeedKmh > 0
+        ? currentGpsSpeedKmh * 0.35 + measuredSpeed * 0.65
+        : measuredSpeed;
   }
 
   currentGpsSpeedKmh = Number(measuredSpeed.toFixed(1));
@@ -1168,9 +1172,9 @@ const recordCoordinate = function (
       const bearing = calculateBearing(coords, dest);
       const compass = getCompassDirection(bearing);
       const distStr =
-        remainingKm < 1 ?
-          `${Math.round(remainingKm * 1000)} m`
-        : `${remainingKm.toFixed(1)} km`;
+        remainingKm < 1
+          ? `${Math.round(remainingKm * 1000)} m`
+          : `${remainingKm.toFixed(1)} km`;
       const estMins = Math.max(1, Math.round((remainingKm / 11) * 60));
 
       const banners = [

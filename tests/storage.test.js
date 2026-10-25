@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 
-const originalLocalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+const originalLocalStorage = Object.getOwnPropertyDescriptor(
+  globalThis,
+  "localStorage",
+);
 
 afterEach(() => {
   if (originalLocalStorage) {
@@ -16,7 +19,10 @@ const loadStorageModule = async () =>
 
 test("reads the in-memory value after a failed write leaves stale persisted data", async () => {
   const persisted = new Map([
-    ["stride_active_workout", JSON.stringify({ status: "in_progress", startTime: 1000 })],
+    [
+      "stride_active_workout",
+      JSON.stringify({ status: "in_progress", startTime: 1000 }),
+    ],
   ]);
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
@@ -33,13 +39,19 @@ test("reads the in-memory value after a failed write leaves stale persisted data
 
   setStorageItem("stride_active_workout", updatedWorkout);
 
-  assert.equal(getStorageItem("stride_active_workout").status, updatedWorkout.status);
+  assert.equal(
+    getStorageItem("stride_active_workout").status,
+    updatedWorkout.status,
+  );
 });
 
 test("uses persisted data again after a later write succeeds", async () => {
   let writesAllowed = false;
   const persisted = new Map([
-    ["stride_active_workout", JSON.stringify({ status: "in_progress", startTime: 1000 })],
+    [
+      "stride_active_workout",
+      JSON.stringify({ status: "in_progress", startTime: 1000 }),
+    ],
   ]);
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
@@ -53,9 +65,15 @@ test("uses persisted data again after a later write succeeds", async () => {
   });
 
   const { getStorageItem, setStorageItem } = await loadStorageModule();
-  setStorageItem("stride_active_workout", { status: "in_progress", startTime: 1000 });
+  setStorageItem("stride_active_workout", {
+    status: "in_progress",
+    startTime: 1000,
+  });
   writesAllowed = true;
-  setStorageItem("stride_active_workout", { status: "complete", startTime: 1000 });
+  setStorageItem("stride_active_workout", {
+    status: "complete",
+    startTime: 1000,
+  });
 
   assert.deepEqual(getStorageItem("stride_active_workout"), {
     status: "complete",
@@ -97,9 +115,17 @@ test("returns valid workout data with bounded, valid GPS coordinates", async () 
     sport: "ride",
     goal: "distance",
     targetValue: 10,
-    routeCoords: [[30, 31], [91, 31], [30, 181], ["30", 31], [30.5, 31.5]],
+    routeCoords: [
+      [30, 31],
+      [91, 31],
+      [30, 181],
+      ["30", 31],
+      [30.5, 31.5],
+    ],
   };
-  const persisted = new Map([["stride_active_workout", JSON.stringify(workout)]]);
+  const persisted = new Map([
+    ["stride_active_workout", JSON.stringify(workout)],
+  ]);
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
     value: { getItem: (key) => persisted.get(key) ?? null },
@@ -110,11 +136,16 @@ test("returns valid workout data with bounded, valid GPS coordinates", async () 
 
   assert.equal(validatedWorkout.sport, "ride");
   assert.equal(validatedWorkout.sportLabel, "Riding");
-  assert.deepEqual(validatedWorkout.routeCoords, [[30, 31], [30.5, 31.5]]);
+  assert.deepEqual(validatedWorkout.routeCoords, [
+    [30, 31],
+    [30.5, 31.5],
+  ]);
 });
 
 test("rejects malformed last-known GPS coordinates", async () => {
-  const persisted = new Map([["stride_last_location", JSON.stringify([91, 31])]]);
+  const persisted = new Map([
+    ["stride_last_location", JSON.stringify([91, 31])],
+  ]);
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
     value: { getItem: (key) => persisted.get(key) ?? null },
@@ -177,7 +208,10 @@ test("decimateRoute leaves short routes untouched and caps long ones", async () 
   const long = Array.from({ length: 1200 }, (_, i) => [i / 1000, i / 1000]);
   const decimated = decimateRoute(long, 500);
 
-  assert.ok(decimated.length <= 500, `expected <= 500, got ${decimated.length}`);
+  assert.ok(
+    decimated.length <= 500,
+    `expected <= 500, got ${decimated.length}`,
+  );
   assert.deepEqual(decimated[0], long[0]);
   assert.deepEqual(decimated[decimated.length - 1], long[long.length - 1]);
 });
@@ -186,7 +220,13 @@ test("formatHistoryDate derives labels from a real timestamp", async () => {
   const { formatHistoryDate } = await loadStorageModule();
 
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 30);
+  const today = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    8,
+    30,
+  );
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
   const older = new Date(today);
@@ -214,7 +254,11 @@ test("normalizes legacy display-string history into numeric records", async () =
   assert.equal(items[0].distanceKm, 5);
   assert.equal(items[0].elapsedSeconds, 32 * 60 + 14);
   assert.equal(items[0].dateLabel, "Today · 08:30 AM");
-  assert.equal(items[0].startedAtMs, null, "a yearless label is never invented");
+  assert.equal(
+    items[0].startedAtMs,
+    null,
+    "a yearless label is never invented",
+  );
 
   assert.equal(items[1].distanceKm, 15.2);
   assert.equal(items[1].elapsedSeconds, 60 * 60 + 2 * 60 + 3);
@@ -284,17 +328,29 @@ test("getCurrentWorkout resolves the record the summary screens should show", as
     status: "in_progress",
     startTime: 1000,
   });
-  assert.equal(getCurrentWorkout(), null, "a running session is not summarizable");
+  assert.equal(
+    getCurrentWorkout(),
+    null,
+    "a running session is not summarizable",
+  );
 
   setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, {
     status: "complete",
     startTime: 1000,
     saved: false,
   });
-  assert.equal(getCurrentWorkout()?.status, "complete", "active beats completed");
+  assert.equal(
+    getCurrentWorkout()?.status,
+    "complete",
+    "active beats completed",
+  );
 
   setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, null);
-  assert.equal(getCurrentWorkout(), null, "active cleared, nothing completed yet");
+  assert.equal(
+    getCurrentWorkout(),
+    null,
+    "active cleared, nothing completed yet",
+  );
 
   setStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT, {
     status: "complete",
@@ -304,6 +360,6 @@ test("getCurrentWorkout resolves the record the summary screens should show", as
   assert.equal(
     getCurrentWorkout()?.status,
     "complete",
-    "falls back to the last completed session"
+    "falls back to the last completed session",
   );
 });

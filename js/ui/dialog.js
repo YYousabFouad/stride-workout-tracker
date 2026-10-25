@@ -32,7 +32,7 @@ export const createDialog = function (modal, options = {}) {
 
   const getFocusable = function () {
     return Array.from(modal.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
-      isVisible
+      isVisible,
     );
   };
 

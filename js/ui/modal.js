@@ -122,7 +122,7 @@ export const initAccountModal = function () {
     syncAccountNavButton();
     closeModal(true);
     document.dispatchEvent(
-      new CustomEvent("stride:account-created", { detail: userProfile })
+      new CustomEvent("stride:account-created", { detail: userProfile }),
     );
   };
 

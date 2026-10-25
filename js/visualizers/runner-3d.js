@@ -35,7 +35,8 @@ export class Runner3D {
   init() {
     const width = this.container.clientWidth || 400;
     const height = this.container.clientHeight || 320;
-    this.isMobile = width < 600 || (window.innerWidth && window.innerWidth < 600);
+    this.isMobile =
+      width < 600 || (window.innerWidth && window.innerWidth < 600);
 
     // 1. Scene & Atmospheric Fog
     this.scene = new THREE.Scene();
@@ -47,7 +48,7 @@ export class Runner3D {
       initialFov,
       width / height,
       0.1,
-      100
+      100,
     );
     this.applyCameraPreset("follow", false);
 
@@ -65,7 +66,7 @@ export class Runner3D {
     // High DPR and realtime shadows can overwhelm mobile GPUs and stall the
     // main thread, which also makes the overlaid controls appear unresponsive.
     this.renderer.setPixelRatio(
-      Math.min(window.devicePixelRatio || 1, this.isMobile ? 1.25 : 2)
+      Math.min(window.devicePixelRatio || 1, this.isMobile ? 1.25 : 2),
     );
     this.renderer.shadowMap.enabled = !this.isMobile;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -85,8 +86,14 @@ export class Runner3D {
       this.resize();
       if (!this.manuallyPaused) this.start();
     };
-    this.renderer.domElement.addEventListener("webglcontextlost", this.onContextLost);
-    this.renderer.domElement.addEventListener("webglcontextrestored", this.onContextRestored);
+    this.renderer.domElement.addEventListener(
+      "webglcontextlost",
+      this.onContextLost,
+    );
+    this.renderer.domElement.addEventListener(
+      "webglcontextrestored",
+      this.onContextRestored,
+    );
 
     // 4. Lighting System
     this.setupLighting();
@@ -232,7 +239,9 @@ export class Runner3D {
     waveGeo.rotateX(-Math.PI / 2);
 
     // Save initial coordinates for smooth undulating fluid wave displacement
-    this.waveOrigPositions = new Float32Array(waveGeo.attributes.position.array);
+    this.waveOrigPositions = new Float32Array(
+      waveGeo.attributes.position.array,
+    );
 
     // Dual aesthetic: dark midnight teal wireframe with glowing cyber-emissive reflections
     const waveMat = new THREE.MeshStandardMaterial({
@@ -322,7 +331,7 @@ export class Runner3D {
     // ==========================================
     const neck = new THREE.Mesh(
       new THREE.CylinderGeometry(0.1, 0.12, 0.12, 8),
-      this.armorMat
+      this.armorMat,
     );
     neck.position.y = 0.65;
     this.torso.add(neck);
@@ -360,11 +369,11 @@ export class Runner3D {
     // ==========================================
     // Legs (Hips -> Knees -> Shins -> Feet)
     // ==========================================
-    this.leftLeg = this.createLeg(-1);
+    this.leftLeg = this.createLeg();
     this.leftLeg.position.set(-0.2, -0.05, 0);
     this.runnerRoot.add(this.leftLeg);
 
-    this.rightLeg = this.createLeg(1);
+    this.rightLeg = this.createLeg();
     this.rightLeg.position.set(0.2, -0.05, 0);
     this.runnerRoot.add(this.rightLeg);
 
@@ -377,7 +386,7 @@ export class Runner3D {
     // Shoulder joint ball
     const shoulderBall = new THREE.Mesh(
       new THREE.SphereGeometry(0.09, 12, 12),
-      this.jointMat
+      this.jointMat,
     );
     shoulderGroup.add(shoulderBall);
 
@@ -393,7 +402,7 @@ export class Runner3D {
 
     const elbowBall = new THREE.Mesh(
       new THREE.SphereGeometry(0.07, 10, 10),
-      this.jointMat
+      this.jointMat,
     );
     elbowGroup.add(elbowBall);
 
@@ -418,13 +427,13 @@ export class Runner3D {
     return shoulderGroup;
   }
 
-  createLeg(side) {
+  createLeg() {
     const hipGroup = new THREE.Group();
 
     // Hip joint
     const hipBall = new THREE.Mesh(
       new THREE.SphereGeometry(0.1, 12, 12),
-      this.jointMat
+      this.jointMat,
     );
     hipGroup.add(hipBall);
 
@@ -441,7 +450,7 @@ export class Runner3D {
 
     const kneeBall = new THREE.Mesh(
       new THREE.SphereGeometry(0.085, 12, 12),
-      this.jointMat
+      this.jointMat,
     );
     kneeGroup.add(kneeBall);
 
@@ -479,14 +488,15 @@ export class Runner3D {
       if (this.lastWidth === width && this.lastHeight === height) return;
       this.lastWidth = width;
       this.lastHeight = height;
-      this.isMobile = width < 600 || (window.innerWidth && window.innerWidth < 600);
+      this.isMobile =
+        width < 600 || (window.innerWidth && window.innerWidth < 600);
       this.camera.aspect = width / height;
       // Dynamically adjust FOV on mobile so runner stays comfortably framed
       this.camera.fov = this.isMobile ? 54 : 46;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(width, height);
       this.renderer.setPixelRatio(
-        Math.min(window.devicePixelRatio || 1, this.isMobile ? 1.25 : 2)
+        Math.min(window.devicePixelRatio || 1, this.isMobile ? 1.25 : 2),
       );
       this.renderer.shadowMap.enabled = !this.isMobile;
     }
@@ -515,7 +525,7 @@ export class Runner3D {
           }
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     );
     this.visibilityObserver.observe(this.container);
   }
@@ -533,8 +543,8 @@ export class Runner3D {
 
   applyCameraPreset(mode, animated = true) {
     this.cameraMode = mode;
-    let target = { x: 3.8, y: 1.8, z: 4.8 };
-    let lookTarget = { x: 0, y: 1.25, z: 0 };
+    let target;
+    let lookTarget;
 
     if (mode === "side") {
       target = { x: 5.2, y: 1.35, z: 0.1 };
@@ -549,7 +559,10 @@ export class Runner3D {
     }
 
     if (animated && window.anime) {
-      if (this.activeCameraAnim && typeof this.activeCameraAnim.pause === "function") {
+      if (
+        this.activeCameraAnim &&
+        typeof this.activeCameraAnim.pause === "function"
+      ) {
         this.activeCameraAnim.pause();
       }
       this.activeCameraAnim = window.anime({
@@ -583,7 +596,10 @@ export class Runner3D {
 
   setSpeed(kmh) {
     const val = Number(kmh);
-    this.speed = Math.max(0, Math.min(75, isNaN(val) ? 0 : Number(val.toFixed(1))));
+    this.speed = Math.max(
+      0,
+      Math.min(75, isNaN(val) ? 0 : Number(val.toFixed(1))),
+    );
     this.isMoving = this.speed >= 0.8;
   }
 
@@ -616,7 +632,7 @@ export class Runner3D {
     const runBounce = isRide
       ? (1 - Math.cos(cycle * 2)) * 0.015
       : (1 - Math.cos(cycle * 2)) * 0.055;
-    const runPosY = isRide ? 1.15 + runBounce : 1.20 + runBounce;
+    const runPosY = isRide ? 1.15 + runBounce : 1.2 + runBounce;
     const idlePosY = 1.18 + breath * 0.008;
     this.runnerRoot.position.y =
       idlePosY + (runPosY - idlePosY) * this.motionWeight;
@@ -628,7 +644,7 @@ export class Runner3D {
 
     const runTorsoX = isRide
       ? 0.36 + Math.sin(cycle * 2) * 0.015 // Aerodynamic cycling tuck
-      : 0.20 + Math.sin(cycle * 2) * 0.02; // Forward athletic run lean
+      : 0.2 + Math.sin(cycle * 2) * 0.02; // Forward athletic run lean
     const idleTorsoX = 0.04 + breath * 0.012;
     this.torso.rotation.x =
       idleTorsoX + (runTorsoX - idleTorsoX) * this.motionWeight;
@@ -648,8 +664,8 @@ export class Runner3D {
     // 2. Leg Kinematics (Running stride vs Cycling pedal revolution)
     const animateLeg = (legGroup, phase) => {
       const phi = (cycle + phase) % (Math.PI * 2);
-      let runHipRot = 0;
-      let runKneeRot = 0.12;
+      let runHipRot;
+      let runKneeRot;
 
       if (isRide) {
         // Cycling circular pedal stroke kinematics:
@@ -682,8 +698,8 @@ export class Runner3D {
     // 3. Arm Kinematics (Counter-oscillation for running, handlebar reach for cycling)
     const animateArm = (armGroup, phase) => {
       const phi = (cycle + phase) % (Math.PI * 2);
-      let runArmX = 0;
-      let runElbowX = -1.35;
+      let runArmX;
+      let runElbowX;
 
       if (isRide) {
         // Cycling: arms reach forward gripping virtual handlebars with subtle cadence sway
@@ -699,8 +715,7 @@ export class Runner3D {
       const idleArmX = 0.06 + breath * 0.02;
       const idleElbowX = -0.28;
 
-      armGroup.rotation.x =
-        idleArmX + (runArmX - idleArmX) * this.motionWeight;
+      armGroup.rotation.x = idleArmX + (runArmX - idleArmX) * this.motionWeight;
       armGroup.elbow.rotation.x =
         idleElbowX + (runElbowX - idleElbowX) * this.motionWeight;
     };
@@ -760,7 +775,7 @@ export class Runner3D {
     // 8. Vanta Wave Field Dynamic Undulation
     if (this.vantaWaveMesh && this.waveOrigPositions) {
       // Throttle wave vertex recalculations on mobile or during idle to save CPU/GPU bandwidth
-      const shouldUpdateWave = !this.isMobile || (this.animFrameCount % 2 === 0);
+      const shouldUpdateWave = !this.isMobile || this.animFrameCount % 2 === 0;
       if (shouldUpdateWave) {
         const pos = this.vantaWaveMesh.geometry.attributes.position.array;
         const orig = this.waveOrigPositions;
@@ -775,7 +790,7 @@ export class Runner3D {
           const distFromCenter = Math.abs(x);
           const waveWeight = Math.min(
             1.0,
-            Math.max(0.12, (distFromCenter - 2.6) / 5.5)
+            Math.max(0.12, (distFromCenter - 2.6) / 5.5),
           );
 
           // Multi-frequency compound trigonometric waves flowing towards -Z
@@ -838,7 +853,10 @@ export class Runner3D {
         this.clock.stop();
       } catch {}
     }
-    if (this.activeCameraAnim && typeof this.activeCameraAnim.pause === "function") {
+    if (
+      this.activeCameraAnim &&
+      typeof this.activeCameraAnim.pause === "function"
+    ) {
       this.activeCameraAnim.pause();
       this.activeCameraAnim = null;
     }
@@ -851,7 +869,10 @@ export class Runner3D {
       this.visibilityObserver = null;
     }
     if (this.onPageVisibilityChange) {
-      document.removeEventListener("visibilitychange", this.onPageVisibilityChange);
+      document.removeEventListener(
+        "visibilitychange",
+        this.onPageVisibilityChange,
+      );
       this.onPageVisibilityChange = null;
     }
     if (this.scene) {
@@ -879,10 +900,16 @@ export class Runner3D {
     }
     if (this.renderer && this.renderer.domElement) {
       if (this.onContextLost) {
-        this.renderer.domElement.removeEventListener("webglcontextlost", this.onContextLost);
+        this.renderer.domElement.removeEventListener(
+          "webglcontextlost",
+          this.onContextLost,
+        );
       }
       if (this.onContextRestored) {
-        this.renderer.domElement.removeEventListener("webglcontextrestored", this.onContextRestored);
+        this.renderer.domElement.removeEventListener(
+          "webglcontextrestored",
+          this.onContextRestored,
+        );
       }
       this.renderer.domElement.remove();
       this.renderer.dispose();

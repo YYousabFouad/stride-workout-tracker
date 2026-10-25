@@ -13,7 +13,11 @@ import {
   getStorageItem,
   setStorageItem,
 } from "../core/storage.js";
-import { getStreakCount, incrementStreak, updateStreakDisplay } from "../core/streak.js";
+import {
+  getStreakCount,
+  incrementStreak,
+  updateStreakDisplay,
+} from "../core/streak.js";
 import { createDialog } from "../ui/dialog.js";
 import {
   addArrowToMap,
@@ -46,7 +50,9 @@ export const initCompleteScreen = function () {
     if (distVal) distVal.textContent = workout.finalDistance || "0.0 km";
     if (timeVal) timeVal.textContent = workout.finalDuration || "00:00";
 
-    const completeMapViewport = document.getElementById("complete-map-viewport");
+    const completeMapViewport = document.getElementById(
+      "complete-map-viewport",
+    );
     if (
       completeMapViewport &&
       typeof L !== "undefined" &&
@@ -186,11 +192,12 @@ export const initCompleteScreen = function () {
             </svg>
           </button>
         </div>
-      `
+      `,
       );
 
-      const completeLocateBtn =
-        completeMapViewport.querySelector("#btn-complete-locate");
+      const completeLocateBtn = completeMapViewport.querySelector(
+        "#btn-complete-locate",
+      );
       if (completeLocateBtn) {
         completeLocateBtn.addEventListener("click", function (evt) {
           evt.stopPropagation();
@@ -198,8 +205,9 @@ export const initCompleteScreen = function () {
         });
       }
 
-      const completeNavBtn =
-        completeMapViewport.querySelector("#btn-complete-navigate");
+      const completeNavBtn = completeMapViewport.querySelector(
+        "#btn-complete-navigate",
+      );
       if (completeNavBtn) {
         completeNavBtn.addEventListener("click", function (evt) {
           evt.stopPropagation();
@@ -211,8 +219,9 @@ export const initCompleteScreen = function () {
         });
       }
 
-      const completeCancelBtn =
-        completeMapViewport.querySelector("#btn-complete-cancel-directions");
+      const completeCancelBtn = completeMapViewport.querySelector(
+        "#btn-complete-cancel-directions",
+      );
       if (completeCancelBtn) {
         completeCancelBtn.addEventListener("click", function (evt) {
           evt.stopPropagation();
@@ -221,16 +230,21 @@ export const initCompleteScreen = function () {
       }
 
       // Tapping complete directions banner re-displays momentary status toast on demand
-      const completeDirectionsBannerEl =
-        completeMapViewport.querySelector("#complete-directions-banner");
+      const completeDirectionsBannerEl = completeMapViewport.querySelector(
+        "#complete-directions-banner",
+      );
       if (completeDirectionsBannerEl) {
         completeDirectionsBannerEl.addEventListener("click", function (evt) {
           if (evt.target.closest("#btn-complete-cancel-directions")) return;
-          const titleEl = completeDirectionsBannerEl.querySelector(".nav-direction-title");
-          const metaEl = completeDirectionsBannerEl.querySelector(".nav-direction-meta");
+          const titleEl = completeDirectionsBannerEl.querySelector(
+            ".nav-direction-title",
+          );
+          const metaEl = completeDirectionsBannerEl.querySelector(
+            ".nav-direction-meta",
+          );
           showNavToast(
             titleEl ? titleEl.textContent : "Navigating to Destination",
-            metaEl ? metaEl.textContent : "Follow highlighted path on your map"
+            metaEl ? metaEl.textContent : "Follow highlighted path on your map",
           );
         });
       }
@@ -322,7 +336,7 @@ export const initCompleteScreen = function () {
     const fallbackEfficiency = calculateEfficiencyMetric(
       distanceKm,
       elapsedSeconds,
-      sport
+      sport,
     );
 
     // Append a machine-readable history entry (v1 schema): the renderer derives

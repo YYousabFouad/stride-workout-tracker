@@ -59,6 +59,7 @@ stride-workout-tracker/
 │   ├── ui/                    # Global Shell & Shared UI Layer
 │   │   ├── shell.js           # Single-source navbar, mobile nav, and modal hydration
 │   │   ├── navigation.js      # Screen switcher and client-side routing
+│   │   ├── dialog.js          # Shared dialog focus trap, Escape, and focus restore
 │   │   └── modal.js           # Account modal controller and event listeners
 │   ├── screens/               # Lazy-Loaded Screen Controllers
 │   │   ├── plan.js            # Plan workout screen form controller
@@ -70,6 +71,11 @@ stride-workout-tracker/
 │   │   └── map.js             # Leaflet GPS route map & graceful offline fallback
 │   ├── vendor/                # Vendored libraries (Three.js v128, Anime.js v3.2.2)
 │   └── main.js                # Main application entrypoint & dynamic module bootstrapper
+│
+├── scripts/
+│   └── dev-server.js          # Zero-dependency static server used by `npm run dev`
+├── tests/                     # Node test suites (storage, streak, a11y, dialog)
+├── .github/workflows/ci.yml   # Lint, format, and test pipeline
 └── README.md                  # Architecture & usage documentation
 ```
 
@@ -79,15 +85,16 @@ stride-workout-tracker/
 
 All workout state is persisted client-side in the browser:
 
-| Key | Purpose | Structure |
-| :--- | :--- | :--- |
-| `stride_active_workout` | Currently active session | `{ id, sport, sportLabel, goal, targetValue, targetUnit, startTime, status, routeCoords }` |
-| `stride_completed_workout` | Most recent finished session | `{ ...activeWorkout, endTime, elapsedSeconds, finalDuration, finalDistance, targetReached, saved, status: "complete" }` |
-| `stride_history` | Array of completed sessions (max 50) | `[ { id, title, date, distance, duration, efficiencyValue, efficiencyLabel, sport }, ... ]` |
-| `stride_streak` | Current active day streak | `number` (e.g. `6`) |
-| `stride_streak_last_activity`| Date string of last workout | `"YYYY-MM-DD"` |
-| `stride_user` | Local athlete profile (not an authenticated account) | `{ username, email, createdAt, updatedAt }` |
-| `stride_last_location` | Last known athlete GPS fix | `[ latitude, longitude ]` |
+| Key                           | Purpose                                              | Structure                                                                                                               |
+| :---------------------------- | :--------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------- |
+| `stride_active_workout`       | Currently active session                             | `{ id, sport, sportLabel, goal, targetValue, targetUnit, startTime, status, routeCoords }`                              |
+| `stride_completed_workout`    | Most recent finished session                         | `{ ...activeWorkout, endTime, elapsedSeconds, finalDuration, finalDistance, targetReached, saved, status: "complete" }` |
+| `stride_history`              | Completed sessions, schema v1 (max 50)               | `[ { id, title, sport, startedAtMs, dateLabel, distanceKm, elapsedSeconds, efficiencyValue, efficiencyLabel }, ... ]`   |
+| `stride_streak`               | Earned streak days (derived on read)                 | `number` (e.g. `6`)                                                                                                     |
+| `stride_streak_last_activity` | Local day key of the last recorded workout           | `"YYYY-MM-DD"`                                                                                                          |
+| `stride_schema_version`       | Persisted data shape version                         | `number` (currently `1`)                                                                                                |
+| `stride_user`                 | Local athlete profile (not an authenticated account) | `{ username, email, createdAt, updatedAt }`                                                                             |
+| `stride_last_location`        | Last known athlete GPS fix                           | `[ latitude, longitude ]`                                                                                               |
 
 ---
 
@@ -95,13 +102,24 @@ All workout state is persisted client-side in the browser:
 
 Because Stride uses **native JavaScript ES Modules** (`<script type="module">`), it must be served over HTTP rather than opened directly via the `file://` protocol.
 
-### Option 1: Using Node.js / `npx serve`
+### Option 1: Project dev server (recommended)
+
+```bash
+npm install
+npm run dev
+```
+
+Then open [http://127.0.0.1:4173](http://127.0.0.1:4173). Set `PORT` or `HOST`
+to change the address (for example `HOST=0.0.0.0 npm run dev` when testing from
+a phone on the same network).
+
+### Option 2: Using `npx serve`
 
 ```bash
 npx serve .
 ```
 
-### Option 2: Using Python 3 Built-in HTTP Server
+### Option 3: Using Python 3 Built-in HTTP Server
 
 ```bash
 python3 -m http.server 8000
@@ -109,9 +127,22 @@ python3 -m http.server 8000
 
 Then open [http://localhost:8000](http://localhost:8000) in your browser.
 
-### Option 3: VS Code / Antigravity Live Server Extension
+### Option 4: VS Code / Antigravity Live Server Extension
 
 Right-click `index.html` and select **"Open with Live Server"**.
+
+### Available scripts
+
+| Command                | Purpose                                  |
+| :--------------------- | :--------------------------------------- |
+| `npm run dev`          | Serve the app at `http://127.0.0.1:4173` |
+| `npm test`             | Run the Node test suite                  |
+| `npm run lint`         | Lint JavaScript with ESLint              |
+| `npm run format`       | Format the repository with Prettier      |
+| `npm run format:check` | Verify formatting without writing        |
+
+Every push to `main` and every pull request runs the same lint, format, and test
+steps through `.github/workflows/ci.yml`.
 
 ---
 
@@ -119,7 +150,7 @@ Right-click `index.html` and select **"Open with Live Server"**.
 
 - **DRY (Don't Repeat Yourself)**: Shared utilities (time formatting, input sanitization, storage keys) are defined in `storage.js` as single sources of truth.
 - **KISS (Keep It Simple, Stupid)**: Linear, understandable vanilla JavaScript with no bloated external build steps or heavy framework runtime.
-- **Accessibility (a11y)**: Semantic HTML5 elements (`<header>`, `<nav>`, `<main>`), proper `aria-label` tags, focus states, and keyboard navigation.
+- **Accessibility (a11y)**: Semantic HTML5 landmarks, skip links, `aria-current` navigation, labelled dialogs with focus trapping and restoration, radiogroup keyboard navigation, live `progressbar` semantics, visible focus rings, and `prefers-reduced-motion` support.
 - **Responsive Design**: Mobile-first design that scales smoothly from smartphones to desktop screens.
 
 ---
