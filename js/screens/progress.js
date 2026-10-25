@@ -370,7 +370,10 @@ export const initProgressScreen = function () {
   if (liveDistance) liveDistance.textContent = "0.0 km";
   if (liveTime) liveTime.textContent = "00:00";
   if (progressPercent) progressPercent.textContent = "0%";
-  if (progressBar) progressBar.style.width = "0%";
+  if (progressBar) {
+    progressBar.style.width = "0%";
+    progressBar.parentElement?.setAttribute("aria-valuenow", "0");
+  }
 
   if (!workout || workout.status === "complete") {
     if (metaTag)
@@ -464,7 +467,10 @@ export const initProgressScreen = function () {
     if (liveTime) liveTime.textContent = formatTime(elapsedSeconds);
     if (liveDistance) liveDistance.textContent = formatDistance(distanceKm);
     if (progressPercent) progressPercent.textContent = `${percent}%`;
-    if (progressBar) progressBar.style.width = `${percent}%`;
+    if (progressBar) {
+      progressBar.style.width = `${percent}%`;
+      progressBar.parentElement?.setAttribute("aria-valuenow", String(percent));
+    }
 
     if (percent >= 100) {
       if (!goalReachedStopped) {

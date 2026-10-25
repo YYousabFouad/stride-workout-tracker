@@ -34,6 +34,7 @@
     <script defer src="js/vendor/anime.min.js"></script>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <!-- Top Navigation Bar (Hydrated by js/ui/shell.js) -->
     <header class="navbar">
       <div class="navbar-container">
@@ -87,7 +88,7 @@
     </header>
 
     <!-- Main Shell -->
-    <main class="main-wrapper">
+    <main class="main-wrapper" id="main-content" tabindex="-1">
       <!-- ====================================================================
          SCREEN 2: Workout In Progress (Figma Screen 2)
          ==================================================================== -->
@@ -243,12 +244,19 @@
                 <!-- Progress Bar -->
                 <div class="progress-container">
                   <div class="progress-header">
-                    <span>Target completion</span>
+                    <span id="live-progress-label">Target completion</span>
                     <span class="u-text-brand" id="live-progress-percent"
                       >0%</span
                     >
                   </div>
-                  <div class="progress-track">
+                  <div
+                    class="progress-track"
+                    role="progressbar"
+                    aria-labelledby="live-progress-label"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow="0"
+                  >
                     <div
                       class="progress-bar"
                       id="live-progress-bar"

@@ -199,6 +199,12 @@
   box-shadow: 0 0 0 3px var(--color-brand-subtle);
 }
 
+/* Restore the keyboard ring that `.form-input:focus` suppresses. */
+.form-input:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
 .input-unit {
   position: absolute;
   right: var(--space-4);

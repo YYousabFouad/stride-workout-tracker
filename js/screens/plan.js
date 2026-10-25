@@ -23,7 +23,6 @@ export const initPlanWorkoutScreen = function () {
   const workoutForm = document.querySelector(".workout-form");
   const targetInput = document.getElementById("target-input");
   const targetUnitLabel = document.getElementById("target-unit-label");
-  const accountModal = document.getElementById("modal-account");
 
   if (!workoutForm || !targetInput) return;
 
@@ -44,16 +43,63 @@ export const initPlanWorkoutScreen = function () {
     }
   };
 
-  const switchSegmentedBtn = function (clickedBtn) {
-    if (clickedBtn.classList.contains("active")) return;
+  /**
+   * Select one segment of a radiogroup: visual state, ARIA state, and roving
+   * tab stop all move together so the group is operable with arrow keys.
+   * @param {HTMLButtonElement} clickedBtn
+   * @param {{ focus?: boolean }} [options]
+   */
+  const switchSegmentedBtn = function (clickedBtn, options = {}) {
     const parentControl = clickedBtn.closest(".segmented-control");
     if (!parentControl) return;
 
     parentControl.querySelectorAll(".segmented-btn").forEach((btn) => {
-      btn.classList.remove("active");
+      const isSelected = btn === clickedBtn;
+      btn.classList.toggle("active", isSelected);
+      btn.setAttribute("aria-checked", String(isSelected));
+      btn.tabIndex = isSelected ? 0 : -1;
     });
-    clickedBtn.classList.add("active");
+
     updateGoalType(clickedBtn);
+    if (options.focus) clickedBtn.focus();
+  };
+
+  const SEGMENT_NAV_KEYS = new Set([
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "ArrowDown",
+    "Home",
+    "End",
+  ]);
+
+  const handleSegmentKeyDown = function (event) {
+    if (!SEGMENT_NAV_KEYS.has(event.key)) return;
+    const btn = event.target.closest(".segmented-btn");
+    if (!btn) return;
+
+    const buttons = Array.from(
+      btn.closest(".segmented-control")?.querySelectorAll(".segmented-btn") ||
+        []
+    );
+    if (buttons.length === 0) return;
+
+    const index = buttons.indexOf(btn);
+    const lastIndex = buttons.length - 1;
+    let nextIndex;
+
+    if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = lastIndex;
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      nextIndex = index === 0 ? lastIndex : index - 1;
+    } else {
+      nextIndex = index === lastIndex ? 0 : index + 1;
+    }
+
+    event.preventDefault();
+    switchSegmentedBtn(buttons[nextIndex], { focus: true });
   };
 
   let waitingForAccount = false;
@@ -95,8 +141,10 @@ export const initPlanWorkoutScreen = function () {
   // Event Listeners
   workoutForm.addEventListener("click", function (e) {
     const btn = e.target.closest(".segmented-btn");
-    if (btn) switchSegmentedBtn(btn);
+    if (btn && !btn.classList.contains("active")) switchSegmentedBtn(btn);
   });
+
+  workoutForm.addEventListener("keydown", handleSegmentKeyDown);
 
   workoutForm.addEventListener("submit", function (e) {
     e.preventDefault();
@@ -107,7 +155,7 @@ export const initPlanWorkoutScreen = function () {
     }
 
     waitingForAccount = true;
-    if (accountModal) accountModal.classList.add("active");
+    document.dispatchEvent(new CustomEvent("stride:open-account"));
   });
 
   document.addEventListener("stride:account-created", function () {

@@ -133,8 +133,8 @@ const renderAccountModal = function () {
       <div class="modal-dialog">
         <div class="modal-header">
           <div class="modal-title-group">
-            <h3 class="modal-title">Create Account</h3>
-            <p class="modal-subtitle">
+            <h3 class="modal-title" id="account-modal-title">Create Account</h3>
+            <p class="modal-subtitle" id="account-modal-subtitle">
               Create an account to start and save workouts
             </p>
           </div>
@@ -229,11 +229,12 @@ export const initAppShell = function () {
     const desktopLinks = headerEl.querySelectorAll(".view-switcher .view-btn");
     if (desktopLinks.length > 0) {
       desktopLinks.forEach((link) => {
-        const href = link.getAttribute("href");
-        if (href === currentPage) {
-          link.classList.add("active");
+        const isActive = link.getAttribute("href") === currentPage;
+        link.classList.toggle("active", isActive);
+        if (isActive) {
+          link.setAttribute("aria-current", "page");
         } else {
-          link.classList.remove("active");
+          link.removeAttribute("aria-current");
         }
       });
     } else {
@@ -246,11 +247,12 @@ export const initAppShell = function () {
     const mobileLinks = mobileNavEl.querySelectorAll(".mobile-nav-item");
     if (mobileLinks.length > 0) {
       mobileLinks.forEach((link) => {
-        const href = link.getAttribute("href");
-        if (href === currentPage) {
-          link.classList.add("active");
+        const isActive = link.getAttribute("href") === currentPage;
+        link.classList.toggle("active", isActive);
+        if (isActive) {
+          link.setAttribute("aria-current", "page");
         } else {
-          link.classList.remove("active");
+          link.removeAttribute("aria-current");
         }
       });
     } else {

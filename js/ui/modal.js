@@ -9,6 +9,7 @@ import {
   sanitizeString,
   setStorageItem,
 } from "../core/storage.js";
+import { createDialog } from "./dialog.js";
 
 let isAccountModalInitialized = false;
 
@@ -36,8 +37,18 @@ export const initAccountModal = function () {
   if (isAccountModalInitialized) return;
   isAccountModalInitialized = true;
 
+  modal.setAttribute("aria-labelledby", "account-modal-title");
+  modal.setAttribute("aria-describedby", "account-modal-subtitle");
+
+  const dialog = createDialog(modal, {
+    initialFocus: () => usernameInput,
+    onEscape: () => {
+      document.dispatchEvent(new CustomEvent("stride:account-cancelled"));
+    },
+  });
+
   const closeModal = function (accountCreated = false) {
-    modal.classList.remove("active");
+    dialog.close();
     if (!accountCreated) {
       document.dispatchEvent(new CustomEvent("stride:account-cancelled"));
     }
@@ -62,12 +73,16 @@ export const initAccountModal = function () {
         subtitleEl.textContent = "Create an account to start and save workouts";
       }
     }
-    modal.classList.add("active");
+    dialog.open();
   };
 
   if (openBtn) {
     openBtn.addEventListener("click", openModal);
   }
+
+  // Screens ask for the account dialog through an event so every opening path
+  // goes through the same focus management.
+  document.addEventListener("stride:open-account", openModal);
 
   // Close triggers: close button and Cancel button
   modal.querySelectorAll(".modal-close-btn, .btn-outline").forEach((btn) => {
@@ -77,17 +92,6 @@ export const initAccountModal = function () {
   // Close on backdrop click
   modal.addEventListener("click", function (e) {
     if (e.target === modal) closeModal(false);
-  });
-
-  // Close any active modal on Escape key
-  document.addEventListener("keydown", function (e) {
-    if (e.key !== "Escape") return;
-    document.querySelectorAll(".modal-overlay.active").forEach((activeModal) => {
-      activeModal.classList.remove("active");
-      if (activeModal.id === "modal-account") {
-        document.dispatchEvent(new CustomEvent("stride:account-cancelled"));
-      }
-    });
   });
 
   // Account creation handling

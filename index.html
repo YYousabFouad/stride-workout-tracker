@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <!-- Top Navigation Bar (Hydrated by js/ui/shell.js) -->
     <header class="navbar">
       <div class="navbar-container">
@@ -70,7 +71,7 @@
     </header>
 
     <!-- Main Shell -->
-    <main class="main-wrapper">
+    <main class="main-wrapper" id="main-content" tabindex="-1">
       <!-- ====================================================================
          SCREEN 1: Plan Workout (Figma Screen 1)
          ==================================================================== -->
@@ -133,11 +134,18 @@
               <form class="workout-form">
                 <!-- Activity Toggle (Run / Ride) -->
                 <div class="form-group">
-                  <label class="form-label">Activity</label>
-                  <div class="segmented-control">
+                  <span class="form-label" id="activity-label">Activity</span>
+                  <div
+                    class="segmented-control"
+                    role="radiogroup"
+                    aria-labelledby="activity-label"
+                  >
                     <button
                       type="button"
                       class="segmented-btn active"
+                      role="radio"
+                      aria-checked="true"
+                      tabindex="0"
                       data-group="sport"
                       data-value="run"
                     >
@@ -158,6 +166,9 @@
                     <button
                       type="button"
                       class="segmented-btn"
+                      role="radio"
+                      aria-checked="false"
+                      tabindex="-1"
                       data-group="sport"
                       data-value="ride"
                     >
@@ -182,11 +193,18 @@
 
                 <!-- Goal Type Toggle (Distance / Time) -->
                 <div class="form-group">
-                  <label class="form-label">Goal type</label>
-                  <div class="segmented-control">
+                  <span class="form-label" id="goal-type-label">Goal type</span>
+                  <div
+                    class="segmented-control"
+                    role="radiogroup"
+                    aria-labelledby="goal-type-label"
+                  >
                     <button
                       type="button"
                       class="segmented-btn active"
+                      role="radio"
+                      aria-checked="true"
+                      tabindex="0"
                       data-group="goal"
                       data-value="distance"
                     >
@@ -195,6 +213,9 @@
                     <button
                       type="button"
                       class="segmented-btn"
+                      role="radio"
+                      aria-checked="false"
+                      tabindex="-1"
                       data-group="goal"
                       data-value="time"
                     >

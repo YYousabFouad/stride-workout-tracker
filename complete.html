@@ -32,6 +32,7 @@
     ></script>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <!-- Top Navigation Bar (Hydrated by js/ui/shell.js) -->
     <header class="navbar">
       <div class="navbar-container">
@@ -85,7 +86,7 @@
     </header>
 
     <!-- Main Shell -->
-    <main class="main-wrapper">
+    <main class="main-wrapper" id="main-content" tabindex="-1">
       <!-- ====================================================================
          SCREEN 3: Workout Complete (Figma Screen 3)
          ==================================================================== -->
@@ -182,12 +183,23 @@
     </main>
 
     <!-- MODAL 1: Target Achieved Alert Modal -->
-    <div class="modal-overlay" id="modal-alert" role="dialog" aria-modal="true">
+    <div
+      class="modal-overlay"
+      id="modal-alert"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="alert-modal-title"
+      aria-describedby="alert-modal-subtitle"
+    >
       <div class="modal-dialog">
         <div class="modal-header">
           <div class="modal-title-group">
-            <span class="modal-subtitle">Workout Notification</span>
-            <h3 class="modal-title">Target Achieved! 🎉</h3>
+            <span class="modal-subtitle" id="alert-modal-subtitle"
+              >Workout Notification</span
+            >
+            <h3 class="modal-title" id="alert-modal-title">
+              Target Achieved! 🎉
+            </h3>
           </div>
           <button type="button" class="modal-close-btn" aria-label="Close">
             <svg

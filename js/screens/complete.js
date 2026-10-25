@@ -14,6 +14,7 @@ import {
   setStorageItem,
 } from "../core/storage.js";
 import { getStreakCount, incrementStreak, updateStreakDisplay } from "../core/streak.js";
+import { createDialog } from "../ui/dialog.js";
 import {
   addArrowToMap,
   clearClickArrowMarker,
@@ -40,7 +41,6 @@ export const initCompleteScreen = function () {
   const timeVal = document.getElementById("complete-time-val");
   const saveWorkoutBtn = document.getElementById("btn-save-workout");
   const alertModal = document.getElementById("modal-alert");
-  const accountModal = document.getElementById("modal-account");
 
   if (workout) {
     if (distVal) distVal.textContent = workout.finalDistance || "0.0 km";
@@ -253,7 +253,10 @@ export const initCompleteScreen = function () {
 
   // Modal alert close & celebration handling
   if (alertModal) {
-    const closeAlertModal = () => alertModal.classList.remove("active");
+    const alertDialog = createDialog(alertModal, {
+      initialFocus: () => alertModal.querySelector(".btn-primary"),
+    });
+    const closeAlertModal = () => alertDialog.close();
 
     alertModal
       .querySelectorAll(".modal-close-btn, .btn-primary")
@@ -270,7 +273,7 @@ export const initCompleteScreen = function () {
       if (metricEl && workout.targetValue && workout.targetUnit) {
         metricEl.textContent = `${workout.targetValue} ${workout.targetUnit}`;
       }
-      alertModal.classList.add("active");
+      alertDialog.open();
     }
   }
 
@@ -352,7 +355,7 @@ export const initCompleteScreen = function () {
 
       if (!getStorageItem(STORAGE_KEYS.USER)) {
         waitingForAccount = true;
-        if (accountModal) accountModal.classList.add("active");
+        document.dispatchEvent(new CustomEvent("stride:open-account"));
         return;
       }
       saveWorkout();
