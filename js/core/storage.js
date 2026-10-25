@@ -144,6 +144,74 @@ export const sanitizeGoal = function (rawGoal) {
   return rawGoal === GOAL_TYPES.TIME ? GOAL_TYPES.TIME : GOAL_TYPES.DISTANCE;
 };
 
+const isValidCoordinate = function (coordinate) {
+  return (
+    Array.isArray(coordinate) &&
+    coordinate.length === 2 &&
+    Number.isFinite(coordinate[0]) &&
+    coordinate[0] >= -90 &&
+    coordinate[0] <= 90 &&
+    Number.isFinite(coordinate[1]) &&
+    coordinate[1] >= -180 &&
+    coordinate[1] <= 180
+  );
+};
+
+const sanitizeRouteCoords = function (coordinates) {
+  if (!Array.isArray(coordinates)) return [];
+  const validCoordinates = coordinates.filter(isValidCoordinate);
+  if (validCoordinates.length <= 500) return validCoordinates;
+
+  const step = Math.ceil((validCoordinates.length - 1) / 499);
+  const decimated = validCoordinates.filter(
+    (_, index) => index % step === 0,
+  );
+  if (decimated[decimated.length - 1] !== validCoordinates[validCoordinates.length - 1]) {
+    decimated.push(validCoordinates[validCoordinates.length - 1]);
+  }
+  return decimated;
+};
+
+const sanitizeWorkout = function (value, key) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (!Number.isFinite(value.startTime) || value.startTime <= 0) return null;
+
+  const status = value.status;
+  if (status !== "in_progress" && status !== "complete") return null;
+  if (key === STORAGE_KEYS.COMPLETED_WORKOUT && status !== "complete") return null;
+
+  const goal = sanitizeGoal(value.goal);
+  return {
+    ...value,
+    sport: sanitizeSport(value.sport),
+    sportLabel: value.sport === SPORTS.RIDE ? "Riding" : "Running",
+    goal,
+    targetValue: sanitizeTarget(value.targetValue, goal),
+    targetUnit: goal === GOAL_TYPES.TIME ? "min" : "km",
+    startTime: value.startTime,
+    status,
+    saved: value.saved === true,
+    routeCoords: sanitizeRouteCoords(value.routeCoords),
+    gpsDistanceKm:
+      Number.isFinite(value.gpsDistanceKm) && value.gpsDistanceKm >= 0
+        ? value.gpsDistanceKm
+        : 0,
+  };
+};
+
+const validateStoredValue = function (key, value) {
+  if (
+    key === STORAGE_KEYS.ACTIVE_WORKOUT ||
+    key === STORAGE_KEYS.COMPLETED_WORKOUT
+  ) {
+    return sanitizeWorkout(value, key);
+  }
+  if (key === STORAGE_KEYS.LAST_LOCATION) {
+    return isValidCoordinate(value) ? value : null;
+  }
+  return value;
+};
+
 /**
  * Sanitize text inputs: strip non-printable/control characters and enforce max length
  * @param {string} str
@@ -180,6 +248,7 @@ export const safeJsonParse = function (raw) {
  * In-memory fallback map for environments where localStorage is blocked (e.g. strict private browsing)
  */
 const memoryStorageFallback = new Map();
+const failedStorageWrites = new Set();
 
 /**
  * Safely parse JSON from localStorage with prototype pollution protection and memory fallback
@@ -187,13 +256,22 @@ const memoryStorageFallback = new Map();
  * @returns {any|null}
  */
 export const getStorageItem = function (key) {
+  // A failed write makes the in-memory value newer than any persisted value.
+  if (failedStorageWrites.has(key)) {
+    return validateStoredValue(key, memoryStorageFallback.get(key) ?? null);
+  }
+
   try {
     const raw =
       typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
-    return raw ? safeJsonParse(raw) : (memoryStorageFallback.get(key) ?? null);
+    if (raw) {
+      const parsed = safeJsonParse(raw);
+      if (parsed !== null) return validateStoredValue(key, parsed);
+    }
+    return validateStoredValue(key, memoryStorageFallback.get(key) ?? null);
   } catch (err) {
     console.warn(`Storage access restricted for ${key}, falling back to memory:`, err);
-    return memoryStorageFallback.get(key) ?? null;
+    return validateStoredValue(key, memoryStorageFallback.get(key) ?? null);
   }
 };
 
@@ -208,8 +286,10 @@ export const setStorageItem = function (key, value) {
       localStorage.setItem(key, JSON.stringify(value));
     }
     memoryStorageFallback.set(key, value);
+    failedStorageWrites.delete(key);
   } catch (err) {
     memoryStorageFallback.set(key, value);
+    failedStorageWrites.add(key);
     console.warn(`Storage write restricted for ${key}, using in-memory state:`, err);
     try {
       // If quota exceeded, prune older historical logs to preserve active and current state
@@ -220,6 +300,7 @@ export const setStorageItem = function (key, value) {
           JSON.stringify(history.slice(0, 10))
         );
         localStorage.setItem(key, JSON.stringify(value));
+        failedStorageWrites.delete(key);
       }
     } catch {
       // Memory fallback is safely preserved
