@@ -4,9 +4,12 @@
  */
 
 import {
+  HISTORY_LIMIT,
   SPORTS,
   STORAGE_KEYS,
   calculateEfficiencyMetric,
+  decimateRoute,
+  getCurrentWorkout,
   getStorageItem,
   setStorageItem,
 } from "../core/storage.js";
@@ -31,16 +34,7 @@ export const initCompleteScreen = function () {
   const viewComplete = document.getElementById("view-complete");
   if (!viewComplete) return;
 
-  const activeWorkout = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
-  const completedWorkout = getStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT);
-  const workout =
-    activeWorkout?.status === "complete"
-      ? activeWorkout
-      : activeWorkout?.status === "in_progress"
-        ? null
-        : completedWorkout?.status === "complete"
-          ? completedWorkout
-          : null;
+  let workout = getCurrentWorkout();
 
   const distVal = document.getElementById("complete-distance-val");
   const timeVal = document.getElementById("complete-time-val");
@@ -245,9 +239,14 @@ export const initCompleteScreen = function () {
     }
   }
 
-  if (!workout && saveWorkoutBtn) {
-    saveWorkoutBtn.disabled = true;
-    saveWorkoutBtn.textContent = "No completed workout to save";
+  if (!workout) {
+    // A screen with no session must not display real-looking measurements.
+    if (distVal) distVal.textContent = "--";
+    if (timeVal) timeVal.textContent = "--";
+    if (saveWorkoutBtn) {
+      saveWorkoutBtn.disabled = true;
+      saveWorkoutBtn.textContent = "No completed workout to save";
+    }
   }
 
   updateStreakDisplay();
@@ -275,26 +274,39 @@ export const initCompleteScreen = function () {
     }
   }
 
-  // Guard against duplicate saves on page reload
-  if (saveWorkoutBtn && workout && workout.saved) {
+  // Reflect an already-persisted save in the button
+  const renderSavedState = function () {
+    if (!saveWorkoutBtn) return;
     saveWorkoutBtn.disabled = true;
     const btnSpan = saveWorkoutBtn.querySelector("span") || saveWorkoutBtn;
     btnSpan.textContent = `Workout Saved! Streak: ${getStreakCount()} Days ✓`;
+  };
+
+  // Guard against duplicate saves on page reload
+  if (saveWorkoutBtn && workout && workout.saved) {
+    renderSavedState();
   }
 
   let waitingForAccount = false;
 
   // Save Workout & Update Streak
   const saveWorkout = function () {
-    if (!workout || !saveWorkoutBtn || saveWorkoutBtn.disabled || workout.saved) return;
+    if (!workout || !saveWorkoutBtn || saveWorkoutBtn.disabled) return;
+
+    // Storage is the source of truth: a second tab may have saved this session
+    // already, and re-saving would double-count the history entry and streak.
+    const persisted = getCurrentWorkout();
+    if (persisted?.saved) {
+      workout = persisted;
+      renderSavedState();
+      return;
+    }
+    if (workout.saved) return;
 
     workout.saved = true;
 
     // Decimate route coordinates if excessively large to prevent localStorage QuotaExceededError (CWE-400)
-    if (Array.isArray(workout.routeCoords) && workout.routeCoords.length > 500) {
-      const step = Math.ceil(workout.routeCoords.length / 500);
-      workout.routeCoords = workout.routeCoords.filter((_, idx) => idx % step === 0);
-    }
+    workout.routeCoords = decimateRoute(workout.routeCoords);
 
     setStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT, workout);
     setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
@@ -310,27 +322,24 @@ export const initCompleteScreen = function () {
       sport
     );
 
-    const timeStr = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    // Append to workout history with bounded size (max 50 recent items to prevent storage exhaustion)
+    // Append a machine-readable history entry (v1 schema): the renderer derives
+    // its labels from these numbers instead of persisting display strings.
     const storedHistory = getStorageItem(STORAGE_KEYS.HISTORY);
     const historyList = Array.isArray(storedHistory) ? storedHistory : [];
     const historyItem = {
       id: workout.id || `workout_${Date.now()}`,
       title: `${workout.sportLabel || "Running"} Session`,
-      date: `Today · ${timeStr}`,
-      distance: workout.finalDistance || "0.0 km",
-      duration: workout.finalDuration || "00:00",
+      sport,
+      startedAtMs: Number.isFinite(workout.startTime)
+        ? workout.startTime
+        : Date.now(),
+      distanceKm,
+      elapsedSeconds,
       efficiencyValue: workout?.efficiencyValue || fallbackEfficiency.value,
       efficiencyLabel: workout?.efficiencyLabel || fallbackEfficiency.label,
-      sport,
     };
     historyList.unshift(historyItem);
-    const boundedHistory = historyList.slice(0, 50);
-    setStorageItem(STORAGE_KEYS.HISTORY, boundedHistory);
+    setStorageItem(STORAGE_KEYS.HISTORY, historyList.slice(0, HISTORY_LIMIT));
 
     saveWorkoutBtn.disabled = true;
     const btnSpan = saveWorkoutBtn.querySelector("span") || saveWorkoutBtn;

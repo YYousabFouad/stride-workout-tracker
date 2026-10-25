@@ -7,8 +7,12 @@ import { initAppShell } from "./ui/shell.js";
 import { initNavigation } from "./ui/navigation.js";
 import { updateStreakDisplay } from "./core/streak.js";
 import { initAccountModal } from "./ui/modal.js";
+import { migrateStoredSchema } from "./core/storage.js";
 
 const bootstrap = async function () {
+  // 0. Bring persisted state up to the current schema before anything reads it
+  migrateStoredSchema();
+
   // 1. Initialize shared layout shell & lightweight global controllers
   initAppShell();
   initNavigation();

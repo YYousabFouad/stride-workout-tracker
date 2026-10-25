@@ -8,6 +8,7 @@
 import {
   STORAGE_KEYS,
   calculateHaversineKm,
+  decimateRoute,
   getStorageItem,
   setStorageItem,
 } from "../core/storage.js";
@@ -1096,13 +1097,8 @@ const recordCoordinate = function (
       totalTrackedDistanceKm += rawStepKm;
       routeCoords.push(smoothedPoint);
 
-      // Decimate coordinates if excessively large to keep Leaflet polyline rendering smooth
-      if (routeCoords.length > 600) {
-        routeCoords = routeCoords.filter(
-          (_, idx) =>
-            idx === 0 || idx === routeCoords.length - 1 || idx % 2 === 0,
-        );
-      }
+      // Decimate when excessively large to keep Leaflet polyline rendering smooth
+      routeCoords = decimateRoute(routeCoords, 600);
     }
   }
 

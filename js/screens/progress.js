@@ -8,6 +8,7 @@ import {
   SPORTS,
   STORAGE_KEYS,
   calculateEfficiencyMetric,
+  decimateRoute,
   formatDistance,
   formatTime,
   getStorageItem,
@@ -287,18 +288,68 @@ export const initProgressScreen = function () {
   const cleanupListeners = () => {
     window.removeEventListener("keydown", handleKeyDown);
     window.removeEventListener("devicemotion", handleDeviceMotion);
+    window.removeEventListener("pagehide", handlePageHide);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    window.removeEventListener("storage", handleStorageEvent);
   };
 
   // Register unload cleanup unconditionally to ensure WebGL context and watchers are always released
   let lastStorageSaveTime = 0;
   const STORAGE_SAVE_THROTTLE_MS = 3000;
+  // Set when another tab takes ownership of this session; our snapshot then
+  // becomes stale and must never overwrite the newer record.
+  let sessionTakenOver = false;
 
   const flushStorageSave = () => {
+    if (sessionTakenOver) return;
     if (workout && workout.status === "in_progress") {
       setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
       lastStorageSaveTime = Date.now();
     }
   };
+
+  // Mobile browsers routinely skip `beforeunload` (iOS Safari, Android Chrome
+  // background tabs), so persistence also rides on pagehide/visibilitychange.
+  const handlePageHide = () => flushStorageSave();
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === "hidden") flushStorageSave();
+  };
+
+  const handleStorageEvent = (event) => {
+    // Only a session we are actively tracking can be lost to another tab; the
+    // preview (no workout) view has nothing to reconcile.
+    if (!workout || workout.status !== "in_progress") return;
+    if (
+      event.key !== null &&
+      event.key !== STORAGE_KEYS.ACTIVE_WORKOUT &&
+      event.key !== STORAGE_KEYS.COMPLETED_WORKOUT
+    ) {
+      return;
+    }
+
+    const latest = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
+    const isSameSession = Boolean(latest) && latest.startTime === workout.startTime;
+    // Routine throttled writes from another tab tracking this same session.
+    if (isSameSession && latest.status === "in_progress") return;
+
+    // Stop writing: `workout` is now a stale snapshot that would clobber the
+    // newer record on the next flush (or on beforeunload during navigation).
+    sessionTakenOver = true;
+    stopTelemetry();
+    stopRouteTracking();
+    if (workoutTimerInterval) {
+      clearInterval(workoutTimerInterval);
+      workoutTimerInterval = null;
+    }
+
+    // A session still running elsewhere: adopt it by reloading.
+    // One that finished: show its summary.
+    window.location.href = latest?.status === "in_progress" ? "progress.html" : "complete.html";
+  };
+
+  window.addEventListener("pagehide", handlePageHide);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  window.addEventListener("storage", handleStorageEvent);
 
   window.addEventListener("beforeunload", () => {
     flushStorageSave();
@@ -380,13 +431,8 @@ export const initProgressScreen = function () {
     onUpdate: ({ coords, distanceKm, speedKmh, isMoving }) => {
       gpsDistanceKm = distanceKm;
       handleGpsMovement({ speedKmh, isMoving });
-      // Cap stored routeCoords to max 500 decimated points to mitigate storage exhaustion (CWE-400)
-      if (Array.isArray(coords) && coords.length > 500) {
-        const step = Math.ceil(coords.length / 500);
-        workout.routeCoords = coords.filter((_, idx) => idx % step === 0);
-      } else {
-        workout.routeCoords = coords;
-      }
+      // Bound stored route points to mitigate storage exhaustion (CWE-400)
+      workout.routeCoords = decimateRoute(coords);
       workout.gpsDistanceKm = Number(distanceKm.toFixed(3));
       const now = Date.now();
       if (now - lastStorageSaveTime >= STORAGE_SAVE_THROTTLE_MS) {
@@ -462,13 +508,8 @@ export const initProgressScreen = function () {
       workout.elapsedSeconds = elapsedSeconds;
       workout.distanceKm = Number(distanceKm.toFixed(2));
 
-      // Decimate coordinate points if overly dense to prevent storage quota exhaustion
-      if (Array.isArray(coords) && coords.length > 500) {
-        const step = Math.ceil(coords.length / 500);
-        workout.routeCoords = coords.filter((_, idx) => idx % step === 0);
-      } else {
-        workout.routeCoords = coords;
-      }
+      // Bound stored route points to prevent storage quota exhaustion
+      workout.routeCoords = decimateRoute(coords);
 
       workout.finalDuration = formatTime(elapsedSeconds);
       workout.finalDistance = formatDistance(distanceKm);

@@ -11,7 +11,21 @@ export const STORAGE_KEYS = {
   STREAK_LAST_ACTIVITY: "stride_streak_last_activity",
   USER: "stride_user",
   LAST_LOCATION: "stride_last_location",
+  SCHEMA_VERSION: "stride_schema_version",
 };
+
+/**
+ * Monotonic version of the persisted data shape. Bump only for incompatible
+ * changes, and add a matching step to `migrateStoredSchema`.
+ * @type {number}
+ */
+export const SCHEMA_VERSION = 1;
+
+/** Hard ceiling on persisted history entries (defends against quota exhaustion). */
+export const HISTORY_LIMIT = 50;
+
+/** Hard ceiling on persisted/decimated GPS route points. */
+export const ROUTE_POINT_LIMIT = 500;
 
 export const SPORTS = {
   RUN: "run",
@@ -52,6 +66,46 @@ export const formatTime = function (totalSeconds) {
 export const formatDistance = function (distanceKm) {
   const safeKm = Math.max(0, Number(distanceKm) || 0);
   return `${safeKm.toFixed(1)} km`;
+};
+
+const pad2 = function (value) {
+  return String(value).padStart(2, "0");
+};
+
+const startOfLocalDay = function (date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+};
+
+/**
+ * Format a workout timestamp for the history log.
+ * Relative labels are only emitted for today/yesterday; older entries keep the
+ * current year so the label never becomes ambiguous across year boundaries.
+ * @param {number} startedAtMs
+ * @returns {string} "" when the timestamp is unusable
+ */
+export const formatHistoryDate = function (startedAtMs) {
+  const at = Number(startedAtMs);
+  const when = new Date(at);
+  if (!Number.isFinite(at) || Number.isNaN(when.getTime())) return "";
+
+  const time = when.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const dayDelta = Math.round(
+    (startOfLocalDay(new Date()) - startOfLocalDay(when)) / 86400000
+  );
+
+  if (dayDelta === 0) return `Today · ${time}`;
+  if (dayDelta === 1) return `Yesterday · ${time}`;
+
+  const dateLabel = when.toLocaleDateString([], {
+    day: "numeric",
+    month: "short",
+    year:
+      when.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  });
+  return `${dateLabel} · ${time}`;
 };
 
 /**
@@ -157,19 +211,31 @@ const isValidCoordinate = function (coordinate) {
   );
 };
 
-const sanitizeRouteCoords = function (coordinates) {
+/**
+ * Reduce a coordinate array to at most `maxPoints`, always preserving the first
+ * and last points so the drawn route keeps its true start and finish.
+ * Shared by the live tracker and both persistence paths (CWE-400).
+ * @param {[number, number][]} coordinates
+ * @param {number} [maxPoints]
+ * @returns {any[]}
+ */
+export const decimateRoute = function (coordinates, maxPoints = ROUTE_POINT_LIMIT) {
   if (!Array.isArray(coordinates)) return [];
-  const validCoordinates = coordinates.filter(isValidCoordinate);
-  if (validCoordinates.length <= 500) return validCoordinates;
+  const limit = Math.max(2, Math.floor(Number(maxPoints) || ROUTE_POINT_LIMIT));
+  if (coordinates.length <= limit) return coordinates;
 
-  const step = Math.ceil((validCoordinates.length - 1) / 499);
-  const decimated = validCoordinates.filter(
-    (_, index) => index % step === 0,
-  );
-  if (decimated[decimated.length - 1] !== validCoordinates[validCoordinates.length - 1]) {
-    decimated.push(validCoordinates[validCoordinates.length - 1]);
+  const step = Math.ceil((coordinates.length - 1) / (limit - 1));
+  const decimated = coordinates.filter((_, index) => index % step === 0);
+  const last = coordinates[coordinates.length - 1];
+  if (decimated[decimated.length - 1] !== last) {
+    decimated.push(last);
   }
   return decimated;
+};
+
+const sanitizeRouteCoords = function (coordinates) {
+  if (!Array.isArray(coordinates)) return [];
+  return decimateRoute(coordinates.filter(isValidCoordinate));
 };
 
 const sanitizeWorkout = function (value, key) {
@@ -199,6 +265,88 @@ const sanitizeWorkout = function (value, key) {
   };
 };
 
+/** Coerce legacy/unknown scalars to bounded, printable text. */
+const toText = function (value) {
+  if (typeof value === "string") return value;
+  if (value === null || value === undefined) return "";
+  return String(value);
+};
+
+/**
+ * Recover a numeric distance from a legacy `"5.0 km"` label.
+ * @param {unknown} label
+ * @returns {number|null}
+ */
+const parseDistanceLabel = function (label) {
+  const match = toText(label).trim().match(/^(\d+(?:\.\d+)?)\s*km$/i);
+  if (!match) return null;
+  const distanceKm = Number(match[1]);
+  return Number.isFinite(distanceKm) ? distanceKm : null;
+};
+
+/**
+ * Recover elapsed seconds from a legacy `formatTime` label ("MM:SS" or "HH:MM:SS").
+ * @param {unknown} label
+ * @returns {number|null}
+ */
+const parseDurationLabel = function (label) {
+  const match = toText(label).trim().match(/^(\d{1,3}):([0-5]\d)(?::([0-5]\d))?$/);
+  if (!match) return null;
+  const elapsedSeconds = match[3]
+    ? Number(match[3]) + Number(match[2]) * 60 + Number(match[1]) * 3600
+    : Number(match[2]) + Number(match[1]) * 60;
+  return elapsedSeconds > 0 ? elapsedSeconds : null;
+};
+
+/**
+ * Normalize one history entry onto the v1 shape: distance/duration as numbers,
+ * and a real timestamp when one exists. Legacy entries persisted `date` as a
+ * display string with no year, so it cannot be converted without inventing
+ * data; it is preserved verbatim as `dateLabel`.
+ * @param {unknown} item
+ * @returns {object|null} null when the entry is unusable
+ */
+const sanitizeHistoryItem = function (item) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+
+  const startedAtMs =
+    Number.isFinite(item.startedAtMs) && item.startedAtMs > 0
+      ? Math.floor(item.startedAtMs)
+      : null;
+
+  const distanceKm =
+    Number.isFinite(item.distanceKm) && item.distanceKm >= 0
+      ? Number(item.distanceKm)
+      : parseDistanceLabel(item.distance);
+
+  const elapsedSeconds =
+    Number.isFinite(item.elapsedSeconds) && item.elapsedSeconds > 0
+      ? Math.floor(item.elapsedSeconds)
+      : parseDurationLabel(item.duration);
+
+  return {
+    id: typeof item.id === "string" ? item.id.slice(0, 64) : "",
+    title: sanitizeString(toText(item.title), 80) || "Workout",
+    sport: sanitizeSport(item.sport),
+    startedAtMs,
+    // Empty when `startedAtMs` is known: the label is derived at render time.
+    dateLabel: startedAtMs === null ? sanitizeString(toText(item.dateLabel ?? item.date), 40) : "",
+    distanceKm,
+    elapsedSeconds,
+    efficiencyValue: sanitizeString(toText(item.efficiencyValue), 16),
+    efficiencyLabel: sanitizeString(toText(item.efficiencyLabel), 32),
+  };
+};
+
+/** Bound, validate, and normalize the whole history array on every read. */
+const sanitizeHistory = function (value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(sanitizeHistoryItem)
+    .filter(Boolean)
+    .slice(0, HISTORY_LIMIT);
+};
+
 const validateStoredValue = function (key, value) {
   if (
     key === STORAGE_KEYS.ACTIVE_WORKOUT ||
@@ -208,6 +356,9 @@ const validateStoredValue = function (key, value) {
   }
   if (key === STORAGE_KEYS.LAST_LOCATION) {
     return isValidCoordinate(value) ? value : null;
+  }
+  if (key === STORAGE_KEYS.HISTORY) {
+    return sanitizeHistory(value);
   }
   return value;
 };
@@ -306,4 +457,38 @@ export const setStorageItem = function (key, value) {
       // Memory fallback is safely preserved
     }
   }
+};
+
+/**
+ * Resolve the workout the Complete/Streak screens should summarize.
+ * Returns null while a session is still in progress, or when none exists.
+ * Single source of truth for "which workout is on screen".
+ * @returns {object|null}
+ */
+export const getCurrentWorkout = function () {
+  const activeWorkout = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
+  if (activeWorkout) {
+    return activeWorkout.status === "complete" ? activeWorkout : null;
+  }
+  const completedWorkout = getStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT);
+  return completedWorkout?.status === "complete" ? completedWorkout : null;
+};
+
+/**
+ * Migrate persisted state up to SCHEMA_VERSION. Idempotent, so it is safe to
+ * call on every boot; returns immediately once the marker matches.
+ *
+ * v0 -> v1: history entries moved from display-only strings to numeric
+ * distance/duration plus a real start timestamp.
+ */
+export const migrateStoredSchema = function () {
+  const stored = Number(getStorageItem(STORAGE_KEYS.SCHEMA_VERSION));
+  if (Number.isFinite(stored) && stored >= SCHEMA_VERSION) return false;
+
+  const history = getStorageItem(STORAGE_KEYS.HISTORY);
+  if (history.length > 0) {
+    setStorageItem(STORAGE_KEYS.HISTORY, history);
+  }
+  setStorageItem(STORAGE_KEYS.SCHEMA_VERSION, SCHEMA_VERSION);
+  return true;
 };
