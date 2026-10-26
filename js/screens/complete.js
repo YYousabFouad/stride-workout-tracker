@@ -53,12 +53,10 @@ export const initCompleteScreen = function () {
     const completeMapViewport = document.getElementById(
       "complete-map-viewport",
     );
-    if (
-      completeMapViewport &&
-      typeof L !== "undefined" &&
-      Array.isArray(workout.routeCoords) &&
-      workout.routeCoords.length > 0
-    ) {
+    const hasRouteCoords =
+      Array.isArray(workout.routeCoords) && workout.routeCoords.length > 0;
+
+    if (completeMapViewport && typeof L !== "undefined" && hasRouteCoords) {
       if (summaryMapInstance) {
         try {
           summaryMapInstance.remove();
@@ -250,6 +248,16 @@ export const initCompleteScreen = function () {
       }
 
       setTimeout(() => summaryMap.invalidateSize(), 100);
+    } else if (completeMapViewport) {
+      completeMapViewport.innerHTML = `
+        <div class="map-grid-layer"></div>
+        <div class="map-hud-top">
+          <div class="gps-badge">
+            <span class="gps-indicator-dot"></span>
+            <span class="gps-status-text">No GPS route recorded for this session</span>
+          </div>
+        </div>
+      `;
     }
   }
 
@@ -260,6 +268,20 @@ export const initCompleteScreen = function () {
     if (saveWorkoutBtn) {
       saveWorkoutBtn.disabled = true;
       saveWorkoutBtn.textContent = "No completed workout to save";
+    }
+    const completeMapViewport = document.getElementById(
+      "complete-map-viewport",
+    );
+    if (completeMapViewport) {
+      completeMapViewport.innerHTML = `
+        <div class="map-grid-layer"></div>
+        <div class="map-hud-top">
+          <div class="gps-badge">
+            <span class="gps-indicator-dot"></span>
+            <span class="gps-status-text">No completed workout to display</span>
+          </div>
+        </div>
+      `;
     }
   }
 
@@ -345,7 +367,7 @@ export const initCompleteScreen = function () {
     const historyList = Array.isArray(storedHistory) ? storedHistory : [];
     const historyItem = {
       id: workout.id || `workout_${Date.now()}`,
-      title: `${workout.sportLabel || "Running"} Session`,
+      title: `${workout.sportLabel || (sport === SPORTS.RIDE ? "Riding" : "Running")} Session`,
       sport,
       startedAtMs: Number.isFinite(workout.startTime)
         ? workout.startTime

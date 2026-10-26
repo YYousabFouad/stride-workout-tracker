@@ -85,8 +85,12 @@ export const initProgressScreen = function () {
       const camBtns = runnerViewport.querySelectorAll(".cam-preset-btn");
       camBtns.forEach((btn) => {
         btn.addEventListener("click", () => {
-          camBtns.forEach((b) => b.classList.remove("active"));
+          camBtns.forEach((b) => {
+            b.classList.remove("active");
+            b.setAttribute("aria-pressed", "false");
+          });
           btn.classList.add("active");
+          btn.setAttribute("aria-pressed", "true");
           const camMode = btn.getAttribute("data-cam");
           if (runner3dInstance) {
             runner3dInstance.applyCameraPreset(camMode, true);
@@ -344,9 +348,16 @@ export const initProgressScreen = function () {
     }
 
     // A session still running elsewhere: adopt it by reloading.
-    // One that finished: show its summary.
-    window.location.href =
-      latest?.status === "in_progress" ? "progress.html" : "complete.html";
+    // One that finished: show its summary; if cancelled/cleared: return to setup.
+    if (latest?.status === "in_progress") {
+      window.location.href = "progress.html";
+    } else if (latest?.status === "complete") {
+      window.location.href = "complete.html";
+    } else {
+      const completed = getStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT);
+      window.location.href =
+        completed?.id === workout.id ? "complete.html" : "index.html";
+    }
   };
 
   window.addEventListener("pagehide", handlePageHide);
@@ -385,6 +396,8 @@ export const initProgressScreen = function () {
         "No workout currently in progress. Start a workout from Plan Workout!";
     }
     if (endWorkoutBtn) {
+      const btnSpan = endWorkoutBtn.querySelector("span") || endWorkoutBtn;
+      btnSpan.textContent = "Plan a workout";
       endWorkoutBtn.addEventListener("click", () => {
         window.location.href = "index.html";
       });
@@ -456,9 +469,14 @@ export const initProgressScreen = function () {
     // can otherwise complete a workout even when location access is unavailable.
     const distanceKm = gpsDistanceKm;
     const rawPercent = isTimeGoal
-      ? (elapsedSeconds / targetSeconds) * 100
-      : (distanceKm / targetValue) * 100;
-    const percent = Math.min(100, Math.max(0, Math.floor(rawPercent)));
+      ? targetSeconds > 0
+        ? (elapsedSeconds / targetSeconds) * 100
+        : 0
+      : targetValue > 0
+        ? (distanceKm / targetValue) * 100
+        : 0;
+    const safePercent = Number.isFinite(rawPercent) ? rawPercent : 0;
+    const percent = Math.min(100, Math.max(0, Math.floor(safePercent)));
 
     return { elapsedSeconds, distanceKm, percent };
   };
@@ -495,6 +513,16 @@ export const initProgressScreen = function () {
         clearInterval(workoutTimerInterval);
         workoutTimerInterval = null;
       }
+
+      // Snapshot final metrics and tracked route coordinates BEFORE tearing down the map
+      const { elapsedSeconds, distanceKm, percent } = computeLiveMetrics();
+      const { coords } = getRouteData();
+      const efficiency = calculateEfficiencyMetric(
+        distanceKm,
+        elapsedSeconds,
+        workout.sport,
+      );
+
       cleanupListeners();
       stopTelemetry();
       stopRouteTracking();
@@ -503,14 +531,6 @@ export const initProgressScreen = function () {
         runner3dInstance.destroy();
         runner3dInstance = null;
       }
-
-      const { elapsedSeconds, distanceKm, percent } = computeLiveMetrics();
-      const { coords } = getRouteData();
-      const efficiency = calculateEfficiencyMetric(
-        distanceKm,
-        elapsedSeconds,
-        workout.sport,
-      );
 
       workout.endTime = Date.now();
       workout.elapsedSeconds = elapsedSeconds;

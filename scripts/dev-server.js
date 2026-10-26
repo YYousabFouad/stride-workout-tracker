@@ -47,7 +47,7 @@ const resolveFilePath = async function (requestUrl) {
 
   const relativePath = normalize(pathname).replace(/^[/\\]+/, "");
   let filePath = join(ROOT, relativePath);
-  if (!filePath.startsWith(ROOT)) return null;
+  if (filePath !== ROOT && !filePath.startsWith(ROOT + "/")) return null;
 
   try {
     const info = await stat(filePath);
@@ -82,6 +82,8 @@ const server = createServer(async (request, response) => {
         MIME_TYPES[extname(filePath).toLowerCase()] ||
         "application/octet-stream",
       "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
     });
     response.end(request.method === "HEAD" ? undefined : body);
   } catch {

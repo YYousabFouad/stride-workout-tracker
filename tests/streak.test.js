@@ -166,3 +166,15 @@ test("restarts at 1 after a broken chain instead of keeping the stale count", as
   assert.equal(incrementStreak(), 1);
   assert.equal(getStorageItem(STORAGE_KEYS.STREAK), 1);
 });
+
+test("daysBetweenDayKeys correctly measures leap years and month transitions", async () => {
+  const { daysBetweenDayKeys } = await loadStreakModule();
+  // 2024 is a leap year (29 days in Feb)
+  assert.equal(daysBetweenDayKeys("2024-02-28", "2024-03-01"), 2);
+  // Non-leap year
+  assert.equal(daysBetweenDayKeys("2025-02-28", "2025-03-01"), 1);
+  // Month transition
+  assert.equal(daysBetweenDayKeys("2026-10-31", "2026-11-01"), 1);
+  // Year transition
+  assert.equal(daysBetweenDayKeys("2026-12-31", "2027-01-01"), 1);
+});

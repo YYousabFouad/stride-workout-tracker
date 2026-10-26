@@ -363,3 +363,27 @@ test("getCurrentWorkout resolves the record the summary screens should show", as
     "falls back to the last completed session",
   );
 });
+
+test("calculateHaversineKm is robust to antipodal clamping, identical coords, and malformed inputs", async () => {
+  const { calculateHaversineKm } = await loadStorageModule();
+
+  assert.equal(calculateHaversineKm(null, null), 0);
+  assert.equal(calculateHaversineKm([10], [10, 20]), 0);
+  assert.equal(calculateHaversineKm([10, "bad"], [10, 20]), 0);
+  assert.equal(calculateHaversineKm([10, Number.NaN], [10, 20]), 0);
+
+  // Identical points should have 0 distance
+  assert.equal(calculateHaversineKm([40.7128, -74.006], [40.7128, -74.006]), 0);
+
+  // Antipodal points (or near-antipodal) must not produce NaN from Math.sqrt(1 - a)
+  const antipodalDist = calculateHaversineKm([90, 0], [-90, 0]);
+  assert.ok(Number.isFinite(antipodalDist));
+  assert.ok(antipodalDist > 20000 && antipodalDist < 20100);
+
+  // Normal distance between two points (e.g. NYC to London ~ 5570 km)
+  const nycToLondon = calculateHaversineKm(
+    [40.7128, -74.006],
+    [51.5074, -0.1278],
+  );
+  assert.ok(nycToLondon > 5500 && nycToLondon < 5650);
+});

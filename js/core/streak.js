@@ -21,6 +21,11 @@ const pad2 = function (value) {
   return String(value).padStart(2, "0");
 };
 
+const formatDays = function (days) {
+  const safeDays = Math.max(0, Math.floor(Number(days) || 0));
+  return `${safeDays} ${safeDays === 1 ? "day" : "days"}`;
+};
+
 /** @param {Date} date @returns {string} local day key, e.g. "2026-10-25" */
 export const toDayKey = function (date) {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
@@ -43,8 +48,8 @@ export const daysBetweenDayKeys = function (fromKey, toKey) {
   if (!isDayKey(fromKey) || !isDayKey(toKey)) return null;
   const [fromYear, fromMonth, fromDay] = fromKey.split("-").map(Number);
   const [toYear, toMonth, toDay] = toKey.split("-").map(Number);
-  const fromMs = new Date(fromYear, fromMonth - 1, fromDay).getTime();
-  const toMs = new Date(toYear, toMonth - 1, toDay).getTime();
+  const fromMs = Date.UTC(fromYear, fromMonth - 1, fromDay);
+  const toMs = Date.UTC(toYear, toMonth - 1, toDay);
   return Math.round((toMs - fromMs) / 86400000);
 };
 
@@ -71,7 +76,7 @@ export const getStreakCount = function () {
 export const updateStreakDisplay = function () {
   const streak = getStreakCount();
   document.querySelectorAll(".streak-days-val").forEach((el) => {
-    el.textContent = `${streak} days`;
+    el.textContent = formatDays(streak);
   });
 
   // Sync current streak card on Plan screen
@@ -79,7 +84,17 @@ export const updateStreakDisplay = function () {
     "#view-plan .streak-number-display",
   );
   if (planStreakEl) {
-    planStreakEl.textContent = `${streak} days`;
+    planStreakEl.textContent = formatDays(streak);
+  }
+
+  // Update dynamic milestone pill on Plan screen
+  const milestoneEl = document.querySelector(".streak-milestone-pill span");
+  if (milestoneEl) {
+    const milestones = [3, 7, 14, 30, 50, 100];
+    const nextMilestone = milestones.find((m) => m > streak);
+    milestoneEl.textContent = nextMilestone
+      ? `Next Milestone: ${nextMilestone} Days Badge`
+      : `Master Athlete: ${streak} Days Streak! 🏆`;
   }
 
   // Sync potential streak card on Complete screen
@@ -97,13 +112,13 @@ export const updateStreakDisplay = function () {
         ? streak
         : streak + 1
       : streak;
-    completeStreakEl.textContent = `${targetStreak} days`;
+    completeStreakEl.textContent = formatDays(targetStreak);
     if (completeDescEl) {
       completeDescEl.textContent = !workout
         ? "Complete a workout to add it to your activity streak."
         : alreadySaved
-          ? `Workout saved! Your active streak is now ${streak} consecutive days.`
-          : `Saving this workout will increase your streak to ${targetStreak} consecutive days! Accounts are stored right in your browser's local storage.`;
+          ? `Workout saved! Your active streak is now ${streak} consecutive ${streak === 1 ? "day" : "days"}.`
+          : `Saving this workout will increase your streak to ${targetStreak} consecutive ${targetStreak === 1 ? "day" : "days"}! Accounts are stored right in your browser's local storage.`;
     }
   }
 };

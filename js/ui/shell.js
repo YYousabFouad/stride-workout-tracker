@@ -63,8 +63,10 @@ const getCurrentPage = function () {
 
 const renderNavbar = function (currentPage) {
   const desktopPills = NAV_ITEMS.map((item) => {
-    const activeClass = item.href === currentPage ? " active" : "";
-    return `<a href="${item.href}" class="view-btn${activeClass}">${item.desktopLabel}</a>`;
+    const isActive = item.href === currentPage;
+    const activeClass = isActive ? " active" : "";
+    const ariaCurrent = isActive ? ' aria-current="page"' : "";
+    return `<a href="${item.href}" class="view-btn${activeClass}"${ariaCurrent}>${item.desktopLabel}</a>`;
   }).join("\n          ");
 
   return `
@@ -93,7 +95,7 @@ const renderNavbar = function (currentPage) {
             <svg viewBox="0 0 24 24" fill="currentColor">
               <path d="${FLAME_ICON_PATH}" />
             </svg>
-            <span class="streak-days-val">5 days</span>
+            <span class="streak-days-val">0 days</span>
           </div>
           <button type="button" class="nav-user-btn" id="btn-open-account">
             <svg
@@ -117,9 +119,11 @@ const renderNavbar = function (currentPage) {
 
 const renderMobileNav = function (currentPage) {
   return NAV_ITEMS.map((item) => {
-    const activeClass = item.href === currentPage ? " active" : "";
+    const isActive = item.href === currentPage;
+    const activeClass = isActive ? " active" : "";
+    const ariaCurrent = isActive ? ' aria-current="page"' : "";
     return `
-      <a href="${item.href}" class="mobile-nav-item${activeClass}">
+      <a href="${item.href}" class="mobile-nav-item${activeClass}"${ariaCurrent}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           ${item.mobileIcon}
         </svg>

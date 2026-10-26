@@ -126,18 +126,14 @@
             <!-- Completed Map Snapshot -->
             <div class="map-viewport" id="complete-map-viewport">
               <div class="map-grid-layer"></div>
-              <svg
-                class="route-vector-svg"
-                viewBox="0 0 500 350"
-                preserveAspectRatio="none"
-              >
-                <path
-                  class="route-polyline"
-                  d="M 80,220 L 210,220 L 210,135 L 360,135"
-                />
-                <circle class="route-origin-marker" cx="80" cy="220" r="7" />
-                <circle class="route-origin-marker" cx="360" cy="135" r="7" />
-              </svg>
+              <div class="map-hud-top">
+                <div class="gps-badge">
+                  <span class="gps-indicator-dot"></span>
+                  <span class="gps-status-text"
+                    >No completed workout to display</span
+                  >
+                </div>
+              </div>
             </div>
           </div>
 

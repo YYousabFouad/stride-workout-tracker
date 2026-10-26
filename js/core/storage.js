@@ -69,11 +69,7 @@ export const formatDistance = function (distanceKm) {
 };
 
 const startOfLocalDay = function (date) {
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-  ).getTime();
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
 };
 
 /**
@@ -118,6 +114,14 @@ export const calculateHaversineKm = function (coordA, coordB) {
   if (!Array.isArray(coordA) || !Array.isArray(coordB)) return 0;
   const [lat1, lon1] = coordA;
   const [lat2, lon2] = coordB;
+  if (
+    !Number.isFinite(lat1) ||
+    !Number.isFinite(lon1) ||
+    !Number.isFinite(lat2) ||
+    !Number.isFinite(lon2)
+  ) {
+    return 0;
+  }
   const R = 6371; // Earth radius in km
   const toRad = (deg) => (deg * Math.PI) / 180;
 
@@ -129,7 +133,8 @@ export const calculateHaversineKm = function (coordA, coordB) {
       Math.cos(toRad(lat2)) *
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const safeA = Math.min(1, Math.max(0, a));
+  const c = 2 * Math.atan2(Math.sqrt(safeA), Math.sqrt(1 - safeA));
   return R * c;
 };
 

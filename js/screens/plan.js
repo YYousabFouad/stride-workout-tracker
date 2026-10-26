@@ -35,11 +35,13 @@ export const initPlanWorkoutScreen = function () {
       targetInput.value = "5.0";
       targetInput.step = "0.5";
       targetInput.min = "0.5";
+      targetInput.max = "100";
     } else if (clickedBtn.dataset.value === GOAL_TYPES.TIME) {
       targetUnitLabel.textContent = "min";
       targetInput.value = "30";
       targetInput.step = "1";
       targetInput.min = "1";
+      targetInput.max = "720";
     }
   };
 
