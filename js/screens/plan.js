@@ -4,6 +4,7 @@
  */
 
 import {
+  GOAL_TARGETS,
   GOAL_TYPES,
   SPORTS,
   STORAGE_KEYS,
@@ -28,22 +29,20 @@ export const initPlanWorkoutScreen = function () {
 
   const updateGoalType = function (clickedBtn) {
     if (clickedBtn.dataset.group !== "goal") return;
-    if (!targetUnitLabel) return;
+    const settings = GOAL_TARGETS[clickedBtn.dataset.value];
+    if (!settings) return;
 
-    if (clickedBtn.dataset.value === GOAL_TYPES.DISTANCE) {
-      targetUnitLabel.textContent = "km";
-      targetInput.value = "5.0";
-      targetInput.step = "0.5";
-      targetInput.min = "0.5";
-      targetInput.max = "100";
-    } else if (clickedBtn.dataset.value === GOAL_TYPES.TIME) {
-      targetUnitLabel.textContent = "min";
-      targetInput.value = "30";
-      targetInput.step = "1";
-      targetInput.min = "1";
-      targetInput.max = "720";
-    }
+    if (targetUnitLabel) targetUnitLabel.textContent = settings.unit;
+    targetInput.value = settings.defaultValue;
+    targetInput.step = String(settings.step);
+    targetInput.min = String(settings.min);
+    targetInput.max = String(settings.max);
   };
+
+  const selectedGoalBtn = workoutForm.querySelector(
+    '.segmented-btn[data-group="goal"].active',
+  );
+  if (selectedGoalBtn) updateGoalType(selectedGoalBtn);
 
   /**
    * Select one segment of a radiogroup: visual state, ARIA state, and roving
@@ -122,7 +121,7 @@ export const initPlanWorkoutScreen = function () {
       : GOAL_TYPES.DISTANCE;
     const goal = sanitizeGoal(rawGoal);
     const targetVal = sanitizeTarget(targetInput.value, goal);
-    const targetUnit = goal === GOAL_TYPES.DISTANCE ? "km" : "min";
+    const targetUnit = GOAL_TARGETS[goal].unit;
 
     const workoutData = {
       id: `workout_${Date.now()}`,

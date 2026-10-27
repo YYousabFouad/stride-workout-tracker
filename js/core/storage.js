@@ -38,6 +38,27 @@ export const GOAL_TYPES = {
 };
 
 /**
+ * Shared display and validation settings for workout targets.
+ * @type {Record<'distance'|'time', { defaultValue: string, unit: string, step: number, min: number, max: number }>}
+ */
+export const GOAL_TARGETS = {
+  [GOAL_TYPES.DISTANCE]: {
+    defaultValue: "5.0",
+    unit: "km",
+    step: 0.5,
+    min: 0.5,
+    max: 100,
+  },
+  [GOAL_TYPES.TIME]: {
+    defaultValue: "30",
+    unit: "min",
+    step: 1,
+    min: 1,
+    max: 720,
+  },
+};
+
+/**
  * Format total seconds into MM:SS or HH:MM:SS
  * @param {number} totalSeconds
  * @returns {string}
@@ -176,14 +197,12 @@ export const calculateEfficiencyMetric = function (
  * @returns {number}
  */
 export const sanitizeTarget = function (rawValue, goal) {
+  const settings = GOAL_TARGETS[goal] || GOAL_TARGETS[GOAL_TYPES.DISTANCE];
   const parsed = parseFloat(rawValue);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    return goal === GOAL_TYPES.TIME ? 30 : 5.0;
+    return Number(settings.defaultValue);
   }
-  // Bounds checking: 0.5km - 100km or 1min - 720min (12 hrs)
-  const min = goal === GOAL_TYPES.TIME ? 1 : 0.5;
-  const max = goal === GOAL_TYPES.TIME ? 720 : 100;
-  return Math.min(Math.max(parsed, min), max);
+  return Math.min(Math.max(parsed, settings.min), settings.max);
 };
 
 /**
