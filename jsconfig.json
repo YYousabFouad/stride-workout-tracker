@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "checkJs": true,
+    "strict": true,
+    "noEmit": true,
+    "allowJs": true,
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "leaflet", "animejs"],
+    "maxNodeModuleJsDepth": 1
+  },
+  "include": ["js/**/*.js", "scripts/**/*.js"],
+  "exclude": ["js/vendor/**", "css/vendor/**"]
+}

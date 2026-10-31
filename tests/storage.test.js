@@ -17,6 +17,52 @@ afterEach(() => {
 const loadStorageModule = async () =>
   import(`../js/core/storage.js?test=${Date.now()}-${Math.random()}`);
 
+test("creates collision-resistant workout identifiers", async () => {
+  const { createWorkoutId } = await loadStorageModule();
+  const ids = Array.from({ length: 20 }, createWorkoutId);
+
+  assert.ok(ids.every((id) => id.startsWith("workout_")));
+  assert.equal(new Set(ids).size, ids.length);
+});
+
+test("uses a stable ID for legacy workouts so save retries can deduplicate", async () => {
+  const { getWorkoutId } = await loadStorageModule();
+  const legacyWorkout = { startTime: 1700000000000 };
+
+  assert.equal(getWorkoutId(legacyWorkout), "workout_legacy_1700000000000");
+  assert.equal(
+    getWorkoutId({ ...legacyWorkout, id: "workout_existing" }),
+    "workout_existing",
+  );
+});
+
+test("formats non-finite workout metrics as zero instead of Infinity or NaN", async () => {
+  const { calculateEfficiencyMetric, formatDistance, formatTime } =
+    await loadStorageModule();
+
+  assert.equal(formatTime(Number.POSITIVE_INFINITY), "00:00");
+  assert.equal(formatDistance(Number.POSITIVE_INFINITY), "0.0 km");
+  assert.deepEqual(
+    calculateEfficiencyMetric(
+      Number.POSITIVE_INFINITY,
+      Number.POSITIVE_INFINITY,
+      "run",
+    ),
+    { value: "--:--", label: "Pace (/km)" },
+  );
+});
+
+test("reports when a write is available only in the current page's memory", async () => {
+  delete globalThis.localStorage;
+
+  const { setStorageItem } = await loadStorageModule();
+
+  assert.equal(
+    setStorageItem("stride_active_workout", { status: "in_progress" }),
+    false,
+  );
+});
+
 test("reads the in-memory value after a failed write leaves stale persisted data", async () => {
   const persisted = new Map([
     [
@@ -89,6 +135,66 @@ test("uses persisted data again after a later write succeeds", async () => {
   });
 });
 
+test("persists the pruned history when quota recovery handles a history write", async () => {
+  const persisted = new Map();
+  const history = Array.from({ length: 13 }, (_, index) => ({
+    id: `workout-${index}`,
+    title: "Workout",
+    sport: "run",
+    startedAtMs: 1000 + index,
+    distanceKm: 5,
+    elapsedSeconds: 1800,
+  }));
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) => persisted.get(key) ?? null,
+      setItem: (key, value) => {
+        const parsed = JSON.parse(value);
+        if (key === "stride_history" && parsed.length > 10) {
+          throw new Error("Storage quota exceeded");
+        }
+        persisted.set(key, value);
+      },
+    },
+  });
+
+  const { getStorageItem, setStorageItem, STORAGE_KEYS } =
+    await loadStorageModule();
+  assert.equal(setStorageItem(STORAGE_KEYS.HISTORY, history), true);
+
+  const persistedHistory = JSON.parse(persisted.get(STORAGE_KEYS.HISTORY));
+  const memoryHistory = getStorageItem(STORAGE_KEYS.HISTORY);
+  assert.equal(persistedHistory.length, 10);
+  assert.equal(memoryHistory.length, 10);
+  assert.equal(persistedHistory[0].id, "workout-0");
+  assert.equal(memoryHistory[0].id, "workout-0");
+});
+
+test("keeps a tombstone when removing a persisted value fails", async () => {
+  const persisted = new Map([
+    ["stride_last_location", JSON.stringify([30, 31])],
+  ]);
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) => persisted.get(key) ?? null,
+      removeItem: () => {
+        throw new Error("Storage removal restricted");
+      },
+    },
+  });
+
+  const { getStorageItem, removeStorageItem, STORAGE_KEYS } =
+    await loadStorageModule();
+  assert.deepEqual(getStorageItem(STORAGE_KEYS.LAST_LOCATION), [30, 31]);
+
+  removeStorageItem(STORAGE_KEYS.LAST_LOCATION);
+
+  assert.equal(getStorageItem(STORAGE_KEYS.LAST_LOCATION), null);
+  assert.equal(persisted.has(STORAGE_KEYS.LAST_LOCATION), true);
+});
+
 test("rejects malformed workout records and sanitizes route coordinates", async () => {
   const persisted = new Map([
     ["stride_active_workout", JSON.stringify({ status: "in_progress" })],
@@ -106,6 +212,34 @@ test("rejects malformed workout records and sanitizes route coordinates", async 
 
   assert.equal(getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT), null);
   assert.equal(getStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT), null);
+});
+
+test("drops negative or inconsistent optional workout metrics", async () => {
+  const persisted = new Map([
+    [
+      "stride_active_workout",
+      JSON.stringify({
+        status: "in_progress",
+        startTime: 1000,
+        endTime: 999,
+        elapsedSeconds: -1,
+        distanceKm: -2,
+        gpsDistanceKm: -3,
+      }),
+    ],
+  ]);
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: { getItem: (key) => persisted.get(key) ?? null },
+  });
+
+  const { getStorageItem, STORAGE_KEYS } = await loadStorageModule();
+  const workout = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
+
+  assert.equal("endTime" in workout, false);
+  assert.equal("elapsedSeconds" in workout, false);
+  assert.equal("distanceKm" in workout, false);
+  assert.equal(workout.gpsDistanceKm, 0);
 });
 
 test("returns valid workout data with bounded, valid GPS coordinates", async () => {
@@ -170,6 +304,31 @@ const useStorageStub = (seed = []) => {
   return persisted;
 };
 
+test("sanitizes stored athlete profiles before returning a typed shape", async () => {
+  const persisted = useStorageStub([
+    [
+      "stride_user",
+      JSON.stringify({
+        username: "  Run\nner  ",
+        email: "runner@example.com",
+        createdAt: 1000,
+        updatedAt: 2000,
+      }),
+    ],
+  ]);
+  const { getStorageItem, STORAGE_KEYS } = await loadStorageModule();
+
+  assert.deepEqual(getStorageItem(STORAGE_KEYS.USER), {
+    username: "Runner",
+    email: "runner@example.com",
+    createdAt: 1000,
+    updatedAt: 2000,
+  });
+
+  persisted.set(STORAGE_KEYS.USER, JSON.stringify({ username: "Runner" }));
+  assert.equal(getStorageItem(STORAGE_KEYS.USER), null);
+});
+
 const legacyHistory = [
   {
     id: "w1",
@@ -214,6 +373,61 @@ test("decimateRoute leaves short routes untouched and caps long ones", async () 
   );
   assert.deepEqual(decimated[0], long[0]);
   assert.deepEqual(decimated[decimated.length - 1], long[long.length - 1]);
+});
+
+test("uniform decimation emits exactly the requested point count", async () => {
+  // Regression: the previous modulo filter returned ~half the requested
+  // points for arrays just over the limit (501 -> 251, 600 -> 301).
+  const { decimateRoute } = await loadStorageModule();
+  for (const [length, limit] of [
+    [501, 500],
+    [600, 500],
+    [501, 500],
+    [1000, 500],
+    [10000, 500],
+  ]) {
+    const route = Array.from({ length }, (_, i) => [i / 1000, i / 1000]);
+    const decimated = decimateRoute(route, limit);
+    assert.ok(
+      decimated.length <= limit,
+      `length ${length}: expected <= ${limit}, got ${decimated.length}`,
+    );
+    assert.ok(
+      // Uniform sampling falls just short only by duplicate collapsed points;
+      // it must never under-sample by more than a rounding artifact.
+      decimated.length >= limit - 2,
+      `length ${length}: expected ~${limit}, got ${decimated.length}`,
+    );
+    assert.deepEqual(decimated[0], route[0]);
+    assert.deepEqual(decimated[decimated.length - 1], route[route.length - 1]);
+  }
+});
+
+test("sanitizeHistory stops scanning after collecting the limit", async () => {
+  const { HISTORY_LIMIT, STORAGE_KEYS, getStorageItem } =
+    await loadStorageModule();
+  // 20k bloated entries (> the pre-optimization full scan path) still bound
+  // quickly to HISTORY_LIMIT instead of mapping the entire array.
+  const bloated = Array.from({ length: 20000 }, (_, i) => ({
+    id: `w-${i}`,
+    title: "Workout",
+    sport: "run",
+    distanceKm: 5,
+    elapsedSeconds: 1800,
+    extra: "x".repeat(60),
+  }));
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) =>
+        key === STORAGE_KEYS.HISTORY ? JSON.stringify(bloated) : null,
+      setItem: () => {},
+      removeItem: () => {},
+    },
+  });
+
+  const history = getStorageItem(STORAGE_KEYS.HISTORY);
+  assert.equal(history.length, HISTORY_LIMIT);
 });
 
 test("formatHistoryDate derives labels from a real timestamp", async () => {
@@ -314,7 +528,23 @@ test("migrateStoredSchema leaves an untouched profile untouched", async () => {
 
   assert.equal(migrateStoredSchema(), true);
   assert.equal(persisted.has(STORAGE_KEYS.HISTORY), false);
-  assert.equal(persisted.get(STORAGE_KEYS.SCHEMA_VERSION), "1");
+  assert.equal(persisted.get(STORAGE_KEYS.SCHEMA_VERSION), "2");
+});
+
+test("migrateStoredSchema copies the legacy streak pair into one state record", async () => {
+  const persisted = useStorageStub([
+    ["stride_schema_version", "1"],
+    ["stride_streak", "6"],
+    ["stride_streak_last_activity", JSON.stringify("2026-10-31")],
+  ]);
+  const { migrateStoredSchema, STORAGE_KEYS } = await loadStorageModule();
+
+  assert.equal(migrateStoredSchema(), true);
+  assert.deepEqual(JSON.parse(persisted.get(STORAGE_KEYS.STREAK_STATE)), {
+    count: 6,
+    lastActivity: "2026-10-31",
+  });
+  assert.equal(persisted.get(STORAGE_KEYS.SCHEMA_VERSION), "2");
 });
 
 test("getCurrentWorkout resolves the record the summary screens should show", async () => {
@@ -362,6 +592,133 @@ test("getCurrentWorkout resolves the record the summary screens should show", as
     "complete",
     "falls back to the last completed session",
   );
+
+  setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, {
+    status: "in_progress",
+    startTime: 1000,
+  });
+  assert.equal(
+    getCurrentWorkout()?.status,
+    "complete",
+    "recovers a completion when only the completed slot was persisted",
+  );
+
+  setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, {
+    id: "new-id",
+    sport: "run",
+    goal: "distance",
+    targetValue: 5,
+    status: "in_progress",
+    startTime: 1000,
+  });
+  assert.equal(
+    getCurrentWorkout(),
+    null,
+    "does not match a new id to a legacy completed record by timestamp alone",
+  );
+});
+
+test("persistCompletedWorkout reports failure when neither durable slot can be written", async () => {
+  useStorageStub([
+    [
+      "stride_active_workout",
+      JSON.stringify({
+        id: "workout-1",
+        sport: "run",
+        goal: "distance",
+        targetValue: 5,
+        startTime: 1000,
+        status: "in_progress",
+      }),
+    ],
+  ]);
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) =>
+        key === "stride_active_workout"
+          ? JSON.stringify({
+              id: "workout-1",
+              sport: "run",
+              goal: "distance",
+              targetValue: 5,
+              startTime: 1000,
+              status: "in_progress",
+            })
+          : null,
+      setItem: () => {
+        throw new Error("Storage quota exceeded");
+      },
+      removeItem: () => {},
+    },
+  });
+
+  const { persistCompletedWorkout } = await loadStorageModule();
+  assert.equal(
+    persistCompletedWorkout({
+      id: "workout-1",
+      sport: "run",
+      sportLabel: "Running",
+      goal: "distance",
+      targetValue: 5,
+      targetUnit: "km",
+      startTime: 1000,
+      status: "complete",
+      saved: false,
+      routeCoords: [],
+      gpsDistanceKm: 0,
+    }),
+    false,
+  );
+});
+
+test("persistCompletedWorkout accepts one durable copy and a fresh page can recover it", async () => {
+  const activeWorkout = {
+    id: "workout-2",
+    sport: "run",
+    goal: "distance",
+    targetValue: 5,
+    startTime: 2000,
+    status: "in_progress",
+  };
+  const persisted = new Map([
+    ["stride_active_workout", JSON.stringify(activeWorkout)],
+  ]);
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) => persisted.get(key) ?? null,
+      setItem: (key, value) => {
+        if (key === "stride_active_workout") {
+          throw new Error("Storage quota exceeded");
+        }
+        persisted.set(key, String(value));
+      },
+      removeItem: (key) => persisted.delete(key),
+    },
+  });
+
+  const completedWorkout = {
+    id: "workout-2",
+    sport: "run",
+    sportLabel: "Running",
+    goal: "distance",
+    targetValue: 5,
+    targetUnit: "km",
+    startTime: 2000,
+    status: "complete",
+    saved: false,
+    routeCoords: [],
+    gpsDistanceKm: 0,
+  };
+  const { persistCompletedWorkout } = await loadStorageModule();
+  assert.equal(persistCompletedWorkout(completedWorkout), true);
+
+  const freshPageStorage = await import(
+    `../js/core/storage.js?fresh-page=${Date.now()}-${Math.random()}`
+  );
+  assert.equal(freshPageStorage.getCurrentWorkout()?.status, "complete");
+  assert.equal(freshPageStorage.getCurrentWorkout()?.id, "workout-2");
 });
 
 test("calculateHaversineKm is robust to antipodal clamping, identical coords, and malformed inputs", async () => {

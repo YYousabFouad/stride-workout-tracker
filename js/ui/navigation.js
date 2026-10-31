@@ -15,6 +15,7 @@ let isNavInitialized = false;
 export const initNavigation = function () {
   if (isNavInitialized) return;
   isNavInitialized = true;
+  /** @type {Record<string, string>} */
   const routesByTitle = {
     "1. Plan Workout": "index.html",
     "2. In Progress": "progress.html",
@@ -30,6 +31,7 @@ export const initNavigation = function () {
   ];
 
   document.addEventListener("click", function (e) {
+    if (!(e.target instanceof Element)) return;
     const navBtn = e.target.closest(".view-btn, .mobile-nav-item");
     if (!navBtn) return;
 
@@ -45,7 +47,7 @@ export const initNavigation = function () {
 
     let cleanTarget = targetPage;
     if (cleanTarget.includes("/")) {
-      cleanTarget = cleanTarget.split("/").pop();
+      cleanTarget = cleanTarget.split("/").pop() || "";
     }
     if (cleanTarget.includes("?")) {
       cleanTarget = cleanTarget.split("?")[0];

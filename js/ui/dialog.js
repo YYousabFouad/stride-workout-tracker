@@ -13,7 +13,9 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(", ");
 
+/** @param {Element} element @returns {element is HTMLElement} */
 const isVisible = function (element) {
+  if (!(element instanceof HTMLElement)) return false;
   return element.getClientRects().length > 0;
 };
 
@@ -28,6 +30,7 @@ export const createDialog = function (modal, options = {}) {
   if (!modal) return null;
 
   const { onEscape, initialFocus } = options;
+  /** @type {HTMLElement|null} */
   let restoreTarget = null;
 
   const getFocusable = function () {
@@ -42,7 +45,10 @@ export const createDialog = function (modal, options = {}) {
     if (restoreTarget?.isConnected) {
       restoreTarget.focus();
     }
-    if (modal.contains(document.activeElement)) {
+    if (
+      document.activeElement instanceof HTMLElement &&
+      modal.contains(document.activeElement)
+    ) {
       document.activeElement.blur();
     }
 
@@ -80,13 +86,6 @@ export const createDialog = function (modal, options = {}) {
   // Escape lives on the document: clicking the backdrop can move focus out of
   // the dialog while it is still open.
   document.addEventListener("keydown", function (event) {
-    if (event.key !== "Escape" || !modal.classList.contains("active")) return;
-    event.preventDefault();
-    close();
-    onEscape?.();
-  });
-
-  modal.addEventListener("keydown", function (event) {
     if (!modal.classList.contains("active")) return;
 
     if (event.key === "Escape") {
@@ -106,11 +105,22 @@ export const createDialog = function (modal, options = {}) {
 
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
+    const activeElement = document.activeElement;
+    const activeIndex =
+      activeElement instanceof HTMLElement
+        ? focusable.indexOf(activeElement)
+        : -1;
 
-    if (event.shiftKey && document.activeElement === first) {
+    if (
+      event.shiftKey &&
+      (document.activeElement === first || activeIndex === -1)
+    ) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
+    } else if (
+      !event.shiftKey &&
+      (document.activeElement === last || activeIndex === -1)
+    ) {
       event.preventDefault();
       first.focus();
     }

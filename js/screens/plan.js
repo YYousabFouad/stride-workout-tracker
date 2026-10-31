@@ -8,7 +8,9 @@ import {
   GOAL_TYPES,
   SPORTS,
   STORAGE_KEYS,
+  createWorkoutId,
   getStorageItem,
+  removeStorageItem,
   sanitizeGoal,
   sanitizeSport,
   sanitizeTarget,
@@ -21,16 +23,19 @@ export const initPlanWorkoutScreen = function () {
   if (isPlanInitialized) return;
   isPlanInitialized = true;
 
-  const workoutForm = document.querySelector(".workout-form");
-  const targetInput = document.getElementById("target-input");
+  const workoutForm = document.querySelector("form.workout-form");
+  const targetInput = /** @type {HTMLInputElement|null} */ (
+    document.getElementById("target-input")
+  );
   const targetUnitLabel = document.getElementById("target-unit-label");
+  const storageError = document.getElementById("storage-error");
 
   if (!workoutForm || !targetInput) return;
 
+  /** @param {HTMLButtonElement} clickedBtn */
   const updateGoalType = function (clickedBtn) {
     if (clickedBtn.dataset.group !== "goal") return;
-    const settings = GOAL_TARGETS[clickedBtn.dataset.value];
-    if (!settings) return;
+    const settings = GOAL_TARGETS[sanitizeGoal(clickedBtn.dataset.value)];
 
     if (targetUnitLabel) targetUnitLabel.textContent = settings.unit;
     targetInput.value = settings.defaultValue;
@@ -39,8 +44,8 @@ export const initPlanWorkoutScreen = function () {
     targetInput.max = String(settings.max);
   };
 
-  const selectedGoalBtn = workoutForm.querySelector(
-    '.segmented-btn[data-group="goal"].active',
+  const selectedGoalBtn = /** @type {HTMLButtonElement|null} */ (
+    workoutForm.querySelector('button.segmented-btn[data-group="goal"].active')
   );
   if (selectedGoalBtn) updateGoalType(selectedGoalBtn);
 
@@ -54,7 +59,8 @@ export const initPlanWorkoutScreen = function () {
     const parentControl = clickedBtn.closest(".segmented-control");
     if (!parentControl) return;
 
-    parentControl.querySelectorAll(".segmented-btn").forEach((btn) => {
+    parentControl.querySelectorAll("button").forEach((btn) => {
+      if (!btn.matches(".segmented-btn")) return;
       const isSelected = btn === clickedBtn;
       btn.classList.toggle("active", isSelected);
       btn.setAttribute("aria-checked", String(isSelected));
@@ -74,15 +80,18 @@ export const initPlanWorkoutScreen = function () {
     "End",
   ]);
 
+  /** @param {KeyboardEvent} event */
   const handleSegmentKeyDown = function (event) {
     if (!SEGMENT_NAV_KEYS.has(event.key)) return;
-    const btn = event.target.closest(".segmented-btn");
-    if (!btn) return;
+    const eventTarget = event.target;
+    if (!(eventTarget instanceof Element)) return;
+    const matchedBtn = eventTarget.closest(".segmented-btn");
+    if (!(matchedBtn instanceof HTMLButtonElement)) return;
+    const btn = matchedBtn;
 
     const buttons = Array.from(
-      btn.closest(".segmented-control")?.querySelectorAll(".segmented-btn") ||
-        [],
-    );
+      btn.closest(".segmented-control")?.querySelectorAll("button") || [],
+    ).filter((candidate) => candidate.matches(".segmented-btn"));
     if (buttons.length === 0) return;
 
     const index = buttons.indexOf(btn);
@@ -106,11 +115,26 @@ export const initPlanWorkoutScreen = function () {
   let waitingForAccount = false;
 
   const handleStartWorkout = function () {
-    const activeSportBtn = workoutForm.querySelector(
-      '.segmented-btn[data-group="sport"].active',
+    // Guard against silently destroying a live session: navigating back to
+    // Plan while a workout runs and pressing Start used to overwrite it.
+    const existing = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
+    if (existing && existing.status === "in_progress") {
+      const discardConfirmed = window.confirm(
+        "A workout is already in progress. Starting a new one will discard it. " +
+          "Choose Cancel to keep it — you can launch it from the In Progress screen.",
+      );
+      if (!discardConfirmed) return;
+    }
+
+    const activeSportBtn = /** @type {HTMLButtonElement|null} */ (
+      workoutForm.querySelector(
+        'button.segmented-btn[data-group="sport"].active',
+      )
     );
-    const activeGoalBtn = workoutForm.querySelector(
-      '.segmented-btn[data-group="goal"].active',
+    const activeGoalBtn = /** @type {HTMLButtonElement|null} */ (
+      workoutForm.querySelector(
+        'button.segmented-btn[data-group="goal"].active',
+      )
     );
 
     const rawSport = activeSportBtn ? activeSportBtn.dataset.value : SPORTS.RUN;
@@ -121,31 +145,51 @@ export const initPlanWorkoutScreen = function () {
       : GOAL_TYPES.DISTANCE;
     const goal = sanitizeGoal(rawGoal);
     const targetVal = sanitizeTarget(targetInput.value, goal);
-    const targetUnit = GOAL_TARGETS[goal].unit;
+    const targetUnit = /** @type {"km"|"min"} */ (GOAL_TARGETS[goal].unit);
 
     const workoutData = {
-      id: `workout_${Date.now()}`,
+      id: createWorkoutId(),
       sport,
       sportLabel,
       goal,
       targetValue: targetVal,
       targetUnit,
       startTime: Date.now(),
-      status: "in_progress",
+      status: /** @type {"in_progress"} */ ("in_progress"),
       saved: false,
+      routeCoords: [],
+      gpsDistanceKm: 0,
     };
 
-    setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workoutData);
+    const persisted = setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workoutData);
+    if (!persisted) {
+      if (storageError) {
+        storageError.textContent =
+          "Browser storage couldn't save this workout. Free space or enable site storage and try again; a workout cannot continue safely across pages without it.";
+        storageError.classList.remove("u-hidden");
+      }
+      return;
+    }
+    if (existing?.status === "in_progress") {
+      // The discarded session's precise GPS fix must not seed the new workout
+      // map or remain persisted after its route has been replaced.
+      removeStorageItem(STORAGE_KEYS.LAST_LOCATION);
+    }
     window.location.href = "progress.html";
   };
 
   // Event Listeners
   workoutForm.addEventListener("click", function (e) {
+    if (!(e.target instanceof Element)) return;
     const btn = e.target.closest(".segmented-btn");
-    if (btn && !btn.classList.contains("active")) switchSegmentedBtn(btn);
+    if (btn instanceof HTMLButtonElement && !btn.classList.contains("active")) {
+      switchSegmentedBtn(btn);
+    }
   });
 
-  workoutForm.addEventListener("keydown", handleSegmentKeyDown);
+  workoutForm.addEventListener("keydown", (event) => {
+    if (event instanceof KeyboardEvent) handleSegmentKeyDown(event);
+  });
 
   workoutForm.addEventListener("submit", function (e) {
     e.preventDefault();

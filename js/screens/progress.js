@@ -12,19 +12,28 @@ import {
   formatDistance,
   formatTime,
   getStorageItem,
+  isSameWorkoutSession,
+  persistCompletedWorkout,
+  removeStorageItem,
   setStorageItem,
 } from "../core/storage.js";
-import { Runner3D } from "../visualizers/runner-3d.js?v=2";
+import { getWorkoutCompletionSnapshot } from "../core/workout-completion.js";
 import {
   destroyMap,
   getRouteData,
   loadMap,
   startRouteTracking,
   stopRouteTracking,
+  // @ts-expect-error Browser import query parameter is a cache-busting suffix.
 } from "../visualizers/map.js?v=2";
 
+/** @typedef {import("../visualizers/runner-3d.js").Runner3D} Runner3DType */
+
+/** @type {ReturnType<typeof setInterval>|null} */
 let workoutTimerInterval = null;
+/** @type {ReturnType<typeof setInterval>|null} */
 let telemetryInterval = null;
+/** @type {Runner3DType|null} */
 let runner3dInstance = null;
 let isProgressInitialized = false;
 
@@ -52,6 +61,9 @@ export const initProgressScreen = function () {
     document.getElementById("live-progress-bar") ||
     document.querySelector(".progress-track .progress-bar");
   const endWorkoutBtn = document.getElementById("btn-end-workout");
+  const completionStorageError = document.getElementById(
+    "completion-storage-error",
+  );
 
   // Visualizer DOM elements
   const runnerViewport = document.getElementById("runner-3d-viewport");
@@ -72,35 +84,85 @@ export const initProgressScreen = function () {
   const isRide = sport === SPORTS.RIDE;
   const baseCadence = isRide ? 90 : 166;
   const baseSpeed = isRide ? 24.2 : 11.4;
+  const isPreviewMode = !workout || workout.status === "complete";
 
   // =========================================================================
-  // 1. Initialize 3D Runner & View Mode Switcher
+  // 1. Initialize 3D Runner (lazy) & View Mode Switcher
   // =========================================================================
-  if (runnerViewport && !runner3dInstance) {
-    try {
-      runner3dInstance = new Runner3D(runnerViewport);
-      runner3dInstance.setSport(sport);
+  /** @type {Promise<Runner3DType|null>|null} */
+  let runner3dInitialization = null;
+  let isScreenDisposed = false;
 
-      // Camera Preset Buttons
-      const camBtns = runnerViewport.querySelectorAll(".cam-preset-btn");
-      camBtns.forEach((btn) => {
-        btn.addEventListener("click", () => {
-          camBtns.forEach((b) => {
-            b.classList.remove("active");
-            b.setAttribute("aria-pressed", "false");
-          });
-          btn.classList.add("active");
-          btn.setAttribute("aria-pressed", "true");
-          const camMode = btn.getAttribute("data-cam");
-          if (runner3dInstance) {
-            runner3dInstance.applyCameraPreset(camMode, true);
-          }
+  const attachCameraButtons = () => {
+    if (!runnerViewport) return;
+    const camBtns = runnerViewport.querySelectorAll(".cam-preset-btn");
+    camBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        camBtns.forEach((b) => {
+          b.classList.remove("active");
+          b.setAttribute("aria-pressed", "false");
         });
+        btn.classList.add("active");
+        btn.setAttribute("aria-pressed", "true");
+        const camMode = btn.getAttribute("data-cam");
+        if (runner3dInstance) {
+          runner3dInstance.applyCameraPreset(camMode || "follow", true);
+        }
       });
-    } catch (err) {
-      console.error("Failed to initialize 3D Runner:", err);
+    });
+  };
+
+  /**
+   * Construct the 3D runner on first use. Importing `runner-3d.js` statically
+   * ships ~1.1 MB of unminified Three.js even when the session starts in
+   * `?mode=map`, where the 3D canvas is never rendered.
+   * @returns {Promise<Runner3DType|null>}
+   */
+  const ensureRunner3d = function () {
+    if (runner3dInstance) return Promise.resolve(runner3dInstance);
+    if (!runnerViewport || isScreenDisposed) return Promise.resolve(null);
+
+    // Share one in-flight import/construction across rapid tab switches. A
+    // dynamic import is cached by the browser, but its continuation still runs
+    // once per caller and would otherwise construct multiple render loops.
+    if (!runner3dInitialization) {
+      runner3dInitialization = (async () => {
+        try {
+          // @ts-expect-error Browser import query parameter is a cache-busting suffix.
+          const { Runner3D } = await import("../visualizers/runner-3d.js?v=2");
+          // The page may have been left while the module was loading.
+          if (isScreenDisposed) return null;
+
+          const runner = new Runner3D(runnerViewport);
+          runner3dInstance = runner;
+          runner.setSport(sport);
+          attachCameraButtons();
+          return runner;
+        } catch (err) {
+          console.error("Failed to initialize 3D Runner:", err);
+          return null;
+        } finally {
+          runner3dInitialization = null;
+        }
+      })();
     }
-  }
+
+    return runner3dInitialization;
+  };
+
+  /** Start the renderer only when its tab is still the visible selection. */
+  /** @param {Runner3DType|null} runner */
+  const activateRunnerIfVisible = (runner) => {
+    if (!runner) return;
+    if (runnerViewport?.hidden) {
+      // The lazy import may finish after the user switches to the map. The
+      // Runner3D constructor auto-starts, so stop that loop explicitly.
+      runner.pause(true);
+      return;
+    }
+    runner.start(true);
+    runner.resize();
+  };
 
   // Motion State & Biomechanical Telemetry Tracking
   let isUserMoving = true;
@@ -108,6 +170,7 @@ export const initProgressScreen = function () {
   let liveCadence = baseCadence;
   let hasReceivedRealGpsSpeed = false;
 
+  /** @param {boolean} isMoving @param {number} speedKmh @param {number} cadenceVal */
   const updateMotionDisplay = (isMoving, speedKmh, cadenceVal) => {
     isUserMoving = isMoving;
     liveSpeedKmh = isMoving ? Number(speedKmh) || 0 : 0;
@@ -119,10 +182,14 @@ export const initProgressScreen = function () {
     }
 
     if (hudCadence) {
-      hudCadence.textContent = `${liveCadence} ${isRide ? "RPM" : "SPM"}`;
+      hudCadence.textContent = `${liveCadence} ${
+        isRide ? "RPM" : "SPM"
+      }${hasReceivedRealGpsSpeed ? "" : " (est.)"}`;
     }
     if (hudSpeed) {
-      hudSpeed.textContent = `${liveSpeedKmh.toFixed(1)} km/h`;
+      hudSpeed.textContent = `${liveSpeedKmh.toFixed(1)} km/h${
+        hasReceivedRealGpsSpeed ? "" : " (est.)"
+      }`;
     }
 
     if (motionStatusEl) {
@@ -165,6 +232,7 @@ export const initProgressScreen = function () {
     btnToggleMotion.addEventListener("click", toggleMotion);
   }
 
+  /** @param {KeyboardEvent} e */
   const handleKeyDown = (e) => {
     if (
       e.code === "Space" &&
@@ -178,9 +246,11 @@ export const initProgressScreen = function () {
 
   // Mobile accelerometer motion sensor (detects running/cycling steps)
   let lastStepDetectedTime = 0;
+  /** @param {DeviceMotionEvent} event */
   const handleDeviceMotion = (event) => {
     if (!event.acceleration && !event.accelerationIncludingGravity) return;
     const acc = event.acceleration || event.accelerationIncludingGravity;
+    if (!acc) return;
     const mag = Math.hypot(acc.x || 0, acc.y || 0, acc.z || 0);
     const threshold = event.acceleration ? 2.8 : 12.6;
     const now = Date.now();
@@ -193,6 +263,7 @@ export const initProgressScreen = function () {
   };
   window.addEventListener("devicemotion", handleDeviceMotion);
 
+  /** @param {{ speedKmh: number, isMoving: boolean }} movement */
   const handleGpsMovement = ({ speedKmh, isMoving }) => {
     if (typeof speedKmh === "number") {
       hasReceivedRealGpsSpeed = true;
@@ -214,18 +285,17 @@ export const initProgressScreen = function () {
     btnMode3d.addEventListener("click", () => {
       btnMode3d.classList.add("active");
       btnMode3d.setAttribute("aria-selected", "true");
+      btnMode3d.tabIndex = 0;
       btnModeMap.classList.remove("active");
       btnModeMap.setAttribute("aria-selected", "false");
+      btnModeMap.tabIndex = -1;
 
-      if (runnerViewport) runnerViewport.style.display = "block";
-      if (mapViewport) mapViewport.style.display = "none";
+      if (runnerViewport) runnerViewport.hidden = false;
+      if (mapViewport) mapViewport.hidden = true;
       if (vizTitle) vizTitle.textContent = "3D Live Runner";
       if (vizSubtitle)
         vizSubtitle.textContent = "Biomechanical pacing & speed telemetry";
-      if (runner3dInstance) {
-        runner3dInstance.start(true);
-        runner3dInstance.resize();
-      }
+      void ensureRunner3d().then(activateRunnerIfVisible);
       updateMotionDisplay(isUserMoving, liveSpeedKmh, liveCadence);
       startTelemetry();
     });
@@ -233,23 +303,39 @@ export const initProgressScreen = function () {
     btnModeMap.addEventListener("click", async () => {
       btnModeMap.classList.add("active");
       btnModeMap.setAttribute("aria-selected", "true");
+      btnModeMap.tabIndex = 0;
       btnMode3d.classList.remove("active");
       btnMode3d.setAttribute("aria-selected", "false");
+      btnMode3d.tabIndex = -1;
 
-      if (mapViewport) mapViewport.style.display = "block";
-      if (runnerViewport) runnerViewport.style.display = "none";
+      if (mapViewport) mapViewport.hidden = false;
+      if (runnerViewport) runnerViewport.hidden = true;
       if (vizTitle) vizTitle.textContent = "Live route";
       if (vizSubtitle) vizSubtitle.textContent = "GPS breadcrumb tracking";
       stopTelemetry();
       if (runner3dInstance) runner3dInstance.pause(true);
-      loadMap();
+      if (workout?.status === "in_progress") {
+        loadMap();
+      } else if (mapViewport) {
+        const previewMessage = document.createElement("p");
+        previewMessage.className = "map-preview-empty";
+        previewMessage.textContent = "Start a workout to track a GPS route.";
+        mapViewport.replaceChildren(previewMessage);
+      }
     });
 
-    // Auto-switch to map view if requested via URL param (?mode=map or #map)
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get("mode") === "map" || window.location.hash === "#map") {
-      btnModeMap.click();
-    }
+    // Roving focus for the visualizer tablist (role="tab" semantics): arrow
+    // keys move both focus and the active tab, as the ARIA pattern requires.
+    /** @param {KeyboardEvent} event */
+    const handleTablistKey = (event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const target = event.target === btnMode3d ? btnModeMap : btnMode3d;
+      target.focus();
+      target.click();
+    };
+    btnMode3d.addEventListener("keydown", handleTablistKey);
+    btnModeMap.addEventListener("keydown", handleTablistKey);
   }
 
   // Biomechanical Telemetry Sync Loop (Active only when 3D Runner view is visible)
@@ -278,15 +364,28 @@ export const initProgressScreen = function () {
     }
   };
 
-  // Ensure 3D runner animation and telemetry HUD are running if 3D viewport is active
-  const isMapMode = mapViewport && mapViewport.style.display === "block";
-  if (!isMapMode && runnerViewport) {
-    if (runner3dInstance) {
-      runner3dInstance.start(true);
-      runner3dInstance.resize();
+  // Auto-switch only after the tab handlers' dependencies are initialized.
+  // Calling click() earlier hits the temporal dead zone for stopTelemetry.
+  if (btnMode3d && btnModeMap) {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("mode") === "map" || window.location.hash === "#map") {
+      btnModeMap.click();
     }
-    updateMotionDisplay(true, baseSpeed, baseCadence);
-    startTelemetry();
+  }
+
+  // Ensure 3D runner animation and telemetry HUD are running if 3D viewport is active
+  const isMapMode = mapViewport && !mapViewport.hidden;
+  if (!isMapMode && runnerViewport) {
+    // Skip the Three.js load entirely while the map view is the active mode.
+    void ensureRunner3d().then(activateRunnerIfVisible);
+    // Preview (no workout): keep the HUD neutral instead of showing
+    // fabricated live speed/cadence for a session that does not exist.
+    if (isPreviewMode) {
+      updateMotionDisplay(false, 0, 0);
+    } else {
+      updateMotionDisplay(true, baseSpeed, baseCadence);
+      startTelemetry();
+    }
   }
 
   const cleanupListeners = () => {
@@ -319,6 +418,7 @@ export const initProgressScreen = function () {
     if (document.visibilityState === "hidden") flushStorageSave();
   };
 
+  /** @param {StorageEvent} event */
   const handleStorageEvent = (event) => {
     // Only a session we are actively tracking can be lost to another tab; the
     // preview (no workout) view has nothing to reconcile.
@@ -331,15 +431,23 @@ export const initProgressScreen = function () {
       return;
     }
 
-    const latest = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
-    const isSameSession =
-      Boolean(latest) && latest.startTime === workout.startTime;
+    const latestActive = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
+    const latestCompleted = getStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT);
+    // Completion writes the recovery slot before the active slot. If the
+    // second write fails, another tab still needs to stop tracking this run.
+    const latest =
+      latestCompleted?.status === "complete" &&
+      isSameWorkoutSession(latestCompleted, workout)
+        ? latestCompleted
+        : latestActive;
+    const isSameSession = isSameWorkoutSession(latest, workout);
     // Routine throttled writes from another tab tracking this same session.
-    if (isSameSession && latest.status === "in_progress") return;
+    if (isSameSession && latest?.status === "in_progress") return;
 
     // Stop writing: `workout` is now a stale snapshot that would clobber the
     // newer record on the next flush (or on beforeunload during navigation).
     sessionTakenOver = true;
+    isScreenDisposed = true;
     stopTelemetry();
     stopRouteTracking();
     if (workoutTimerInterval) {
@@ -354,9 +462,9 @@ export const initProgressScreen = function () {
     } else if (latest?.status === "complete") {
       window.location.href = "complete.html";
     } else {
-      const completed = getStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT);
-      window.location.href =
-        completed?.id === workout.id ? "complete.html" : "index.html";
+      window.location.href = isSameWorkoutSession(latestCompleted, workout)
+        ? "complete.html"
+        : "index.html";
     }
   };
 
@@ -365,6 +473,7 @@ export const initProgressScreen = function () {
   window.addEventListener("storage", handleStorageEvent);
 
   window.addEventListener("beforeunload", () => {
+    isScreenDisposed = true;
     flushStorageSave();
     if (workoutTimerInterval) clearInterval(workoutTimerInterval);
     cleanupListeners();
@@ -389,8 +498,7 @@ export const initProgressScreen = function () {
   }
 
   if (!workout || workout.status === "complete") {
-    if (metaTag)
-      metaTag.textContent = `${isRide ? "Cycling" : "Running"} · 5.0 km target`;
+    if (metaTag) metaTag.textContent = "No workout in progress";
     if (targetHint) {
       targetHint.textContent =
         "No workout currently in progress. Start a workout from Plan Workout!";
@@ -403,13 +511,9 @@ export const initProgressScreen = function () {
       });
     }
 
-    // Measure live movement via GPS in preview mode
-    startRouteTracking({
-      onUpdate: ({ speedKmh, isMoving }) => {
-        handleGpsMovement({ speedKmh, isMoving });
-      },
-    });
-
+    // No GPS tracking in preview mode: without a workout there is nothing to
+    // measure, so requesting location would prompt, drain battery, and persist
+    // position fixes for no benefit.
     return;
   }
 
@@ -446,7 +550,10 @@ export const initProgressScreen = function () {
   startRouteTracking({
     initialCoords: workout.routeCoords || [],
     initialDistanceKm: gpsDistanceKm,
-    onUpdate: ({ coords, distanceKm, speedKmh, isMoving }) => {
+    onUpdate: (
+      /** @type {import("../visualizers/map-contracts.js").RouteUpdate} */ update,
+    ) => {
+      const { coords, distanceKm, speedKmh, isMoving } = update;
       gpsDistanceKm = distanceKm;
       handleGpsMovement({ speedKmh, isMoving });
       // Bound stored route points to mitigate storage exhaustion (CWE-400)
@@ -495,10 +602,11 @@ export const initProgressScreen = function () {
     if (percent >= 100) {
       if (!goalReachedStopped) {
         goalReachedStopped = true;
-        stopRouteTracking();
+        // Only the real goal trigger may show the celebratory popup.
+        stopRouteTracking(true);
       }
       if (targetHint) {
-        targetHint.textContent = `Target reached! You completed ${workout.targetValue} ${workout.targetUnit} 🎉`;
+        targetHint.textContent = `Target reached! You completed ${workout?.targetValue ?? targetValue} ${workout?.targetUnit ?? (isTimeGoal ? "min" : "km")} 🎉`;
       }
     }
   }
@@ -509,14 +617,29 @@ export const initProgressScreen = function () {
   // End Workout
   if (endWorkoutBtn) {
     endWorkoutBtn.addEventListener("click", function () {
+      isScreenDisposed = true;
       if (workoutTimerInterval) {
         clearInterval(workoutTimerInterval);
         workoutTimerInterval = null;
       }
 
       // Snapshot final metrics and tracked route coordinates BEFORE tearing down the map
-      const { elapsedSeconds, distanceKm, percent } = computeLiveMetrics();
+      const liveMetrics =
+        workout.status === "complete"
+          ? {
+              elapsedSeconds: workout.elapsedSeconds || 0,
+              distanceKm: workout.distanceKm || gpsDistanceKm,
+              percent: workout.targetReached ? 100 : 0,
+            }
+          : computeLiveMetrics();
       const { coords } = getRouteData();
+      const completion = getWorkoutCompletionSnapshot(
+        workout,
+        liveMetrics,
+        coords,
+        Date.now(),
+      );
+      const { elapsedSeconds, distanceKm, targetReached } = completion;
       const efficiency = calculateEfficiencyMetric(
         distanceKm,
         elapsedSeconds,
@@ -525,29 +648,43 @@ export const initProgressScreen = function () {
 
       cleanupListeners();
       stopTelemetry();
-      stopRouteTracking();
+      stopRouteTracking(targetReached);
       destroyMap();
+      // The precise last-known location is no longer needed once the workout
+      // ends; keeping it would persist GPS data indefinitely (privacy + quota).
+      removeStorageItem(STORAGE_KEYS.LAST_LOCATION);
       if (runner3dInstance) {
         runner3dInstance.destroy();
         runner3dInstance = null;
       }
 
-      workout.endTime = Date.now();
+      workout.endTime = completion.endTime;
       workout.elapsedSeconds = elapsedSeconds;
       workout.distanceKm = Number(distanceKm.toFixed(2));
 
       // Bound stored route points to prevent storage quota exhaustion
-      workout.routeCoords = decimateRoute(coords);
+      workout.routeCoords = decimateRoute(completion.routeCoords);
 
       workout.finalDuration = formatTime(elapsedSeconds);
       workout.finalDistance = formatDistance(distanceKm);
       workout.efficiencyValue = efficiency.value;
       workout.efficiencyLabel = efficiency.label;
-      workout.targetReached = percent >= 100;
+      workout.targetReached = targetReached;
       workout.status = "complete";
 
-      setStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT, workout);
-      setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
+      if (!persistCompletedWorkout(workout)) {
+        if (completionStorageError) {
+          completionStorageError.textContent =
+            "Browser storage couldn't save the completed workout. Free space or enable site storage, then retry while this page stays open.";
+          completionStorageError.classList.remove("u-hidden");
+        }
+        const btnSpan = endWorkoutBtn.querySelector("span") || endWorkoutBtn;
+        btnSpan.textContent = "Retry save";
+        return;
+      }
+      if (completionStorageError) {
+        completionStorageError.classList.add("u-hidden");
+      }
       window.location.href = "complete.html";
     });
   }

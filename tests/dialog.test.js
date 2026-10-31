@@ -72,10 +72,10 @@ class FakeElement {
     return this.children.includes(element);
   }
   focus() {
-    globalThis.document.activeElement = this;
+    Reflect.set(globalThis.document, "activeElement", this);
   }
   blur() {
-    globalThis.document.activeElement = null;
+    Reflect.set(globalThis.document, "activeElement", null);
   }
 }
 
@@ -137,7 +137,13 @@ test("focuses the requested control, traps Tab, and restores focus on close", ()
   const first = new FakeElement();
   const last = new FakeElement();
   const modal = new FakeElement([first, last]);
-  const dialog = createDialog(modal, { initialFocus: () => last });
+  const dialog = createDialog(
+    /** @type {HTMLElement} */ (/** @type {unknown} */ (modal)),
+    {
+      initialFocus: () =>
+        /** @type {HTMLElement} */ (/** @type {unknown} */ (last)),
+    },
+  );
 
   documentStub.activeElement = opener;
   dialog.open();
@@ -146,11 +152,11 @@ test("focuses the requested control, traps Tab, and restores focus on close", ()
   assert.equal(modal.getAttribute("aria-hidden"), "false");
 
   // Tab from the last control wraps around to the first.
-  modal.dispatch("keydown", keyEvent("Tab"));
+  documentStub.dispatch("keydown", keyEvent("Tab"));
   assert.equal(documentStub.activeElement, first);
 
   // Shift+Tab from the first control wraps around to the last.
-  modal.dispatch("keydown", keyEvent("Tab", { shiftKey: true }));
+  documentStub.dispatch("keydown", keyEvent("Tab", { shiftKey: true }));
   assert.equal(documentStub.activeElement, last);
 
   dialog.close();
@@ -159,10 +165,35 @@ test("focuses the requested control, traps Tab, and restores focus on close", ()
   assert.equal(modal.classList.contains("active"), false);
 });
 
+test("keeps Tab focus inside an open dialog when focus moved outside", () => {
+  const first = new FakeElement();
+  const last = new FakeElement();
+  const modal = new FakeElement([first, last]);
+  const dialog = createDialog(
+    /** @type {HTMLElement} */ (/** @type {unknown} */ (modal)),
+  );
+  dialog.open();
+
+  documentStub.activeElement = new FakeElement();
+  const forwardTab = keyEvent("Tab");
+  documentStub.dispatch("keydown", forwardTab);
+  assert.equal(forwardTab.defaultPrevented, true);
+  assert.equal(documentStub.activeElement, first);
+
+  documentStub.activeElement = new FakeElement();
+  const reverseTab = keyEvent("Tab", { shiftKey: true });
+  documentStub.dispatch("keydown", reverseTab);
+  assert.equal(reverseTab.defaultPrevented, true);
+  assert.equal(documentStub.activeElement, last);
+});
+
 test("Escape closes an open dialog once and notifies the caller", () => {
   const modal = new FakeElement([new FakeElement()]);
   let escapes = 0;
-  const dialog = createDialog(modal, { onEscape: () => escapes++ });
+  const dialog = createDialog(
+    /** @type {HTMLElement} */ (/** @type {unknown} */ (modal)),
+    { onEscape: () => escapes++ },
+  );
 
   documentStub.dispatch("keydown", keyEvent("Escape"));
   assert.equal(escapes, 0, "a closed dialog ignores Escape");
@@ -183,7 +214,9 @@ test("re-opening a visible dialog restores focus to the original opener", () => 
   const opener = new FakeElement();
   const first = new FakeElement();
   const modal = new FakeElement([first]);
-  const dialog = createDialog(modal);
+  const dialog = createDialog(
+    /** @type {HTMLElement} */ (/** @type {unknown} */ (modal)),
+  );
 
   documentStub.activeElement = opener;
   dialog.open();

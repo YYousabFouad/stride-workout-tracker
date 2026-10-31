@@ -9,13 +9,14 @@ import {
   STORAGE_KEYS,
   calculateEfficiencyMetric,
   decimateRoute,
+  getWorkoutId,
   getCurrentWorkout,
   getStorageItem,
   setStorageItem,
 } from "../core/storage.js";
 import {
   getStreakCount,
-  incrementStreak,
+  recordWorkoutStreak,
   updateStreakDisplay,
 } from "../core/streak.js";
 import { createDialog } from "../ui/dialog.js";
@@ -27,8 +28,13 @@ import {
   navigateToArrow,
   showCurrentLocation,
   showNavToast,
+  // @ts-expect-error Browser import query parameter is a cache-busting suffix.
 } from "../visualizers/map.js?v=2";
 
+/** @type {typeof import("leaflet")} */
+const L = /** @type {typeof import("leaflet")} */ (globalThis.L);
+
+/** @type {import("leaflet").Map|null} */
 let summaryMapInstance = null;
 let isCompleteInitialized = false;
 
@@ -43,7 +49,10 @@ export const initCompleteScreen = function () {
 
   const distVal = document.getElementById("complete-distance-val");
   const timeVal = document.getElementById("complete-time-val");
-  const saveWorkoutBtn = document.getElementById("btn-save-workout");
+  const saveWorkoutBtn = /** @type {HTMLButtonElement|null} */ (
+    document.getElementById("btn-save-workout")
+  );
+  const saveError = document.getElementById("save-workout-error");
   const alertModal = document.getElementById("modal-alert");
 
   if (workout) {
@@ -65,8 +74,12 @@ export const initCompleteScreen = function () {
         }
         summaryMapInstance = null;
       }
-      if (completeMapViewport._leaflet_id) {
-        delete completeMapViewport._leaflet_id;
+      const leafletViewport =
+        /** @type {HTMLElement & {_leaflet_id?: number}} */ (
+          completeMapViewport
+        );
+      if (leafletViewport._leaflet_id) {
+        delete leafletViewport._leaflet_id;
       }
       completeMapViewport.replaceChildren();
       summaryMapInstance = L.map("complete-map-viewport", {
@@ -130,7 +143,7 @@ export const initCompleteScreen = function () {
         "beforeend",
         `
         <div class="map-hud-top" id="complete-map-hud-top">
-          <div class="nav-directions-banner" id="complete-directions-banner" style="display: none;" role="status" title="Navigation instructions">
+          <div class="nav-directions-banner u-hidden" id="complete-directions-banner" role="status" title="Navigation instructions">
             <div class="nav-directions-left">
               <div class="nav-bearing-icon" title="Compass heading">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -150,7 +163,7 @@ export const initCompleteScreen = function () {
             </button>
           </div>
         </div>
-        <div class="nav-moment-toast" id="complete-nav-toast" style="display: none;" role="status">
+        <div class="nav-moment-toast u-hidden" id="complete-nav-toast" role="status">
           <div class="nav-moment-toast-icon">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
@@ -164,11 +177,10 @@ export const initCompleteScreen = function () {
         <div class="map-controls-group">
           <button
             type="button"
-            class="map-control-btn nav-target-btn"
+            class="map-control-btn nav-target-btn u-hidden"
             id="btn-complete-navigate"
             title="Get directions to arrow"
             aria-label="Get directions to arrow"
-            style="display: none;"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon">
               <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
@@ -233,7 +245,12 @@ export const initCompleteScreen = function () {
       );
       if (completeDirectionsBannerEl) {
         completeDirectionsBannerEl.addEventListener("click", function (evt) {
-          if (evt.target.closest("#btn-complete-cancel-directions")) return;
+          if (
+            evt.target instanceof Element &&
+            evt.target.closest("#btn-complete-cancel-directions")
+          ) {
+            return;
+          }
           const titleEl = completeDirectionsBannerEl.querySelector(
             ".nav-direction-title",
           );
@@ -292,6 +309,7 @@ export const initCompleteScreen = function () {
     const alertDialog = createDialog(alertModal, {
       initialFocus: () => alertModal.querySelector(".btn-primary"),
     });
+    if (!alertDialog) return;
     const closeAlertModal = () => alertDialog.close();
 
     alertModal
@@ -342,16 +360,14 @@ export const initCompleteScreen = function () {
     }
     if (workout.saved) return;
 
-    workout.saved = true;
-
     // Decimate route coordinates if excessively large to prevent localStorage QuotaExceededError (CWE-400)
     workout.routeCoords = decimateRoute(workout.routeCoords);
 
-    setStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT, workout);
-    setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
-
-    const newStreak = incrementStreak();
-
+    // Save order (history → streak → `saved`) makes this idempotent and
+    // crash-safe: the history entry is the durable record, `recordWorkoutStreak`
+    // is already a no-op for a second workout on the same day, and only a
+    // fully persisted workout is ever flagged as saved. A crash between steps
+    // therefore leaves the button enabled and a retry fixes up the rest.
     const sport = workout.sport || SPORTS.RUN;
     const distanceKm = Number(workout.distanceKm) || 0;
     const elapsedSeconds = Number(workout.elapsedSeconds) || 0;
@@ -365,24 +381,60 @@ export const initCompleteScreen = function () {
     // its labels from these numbers instead of persisting display strings.
     const storedHistory = getStorageItem(STORAGE_KEYS.HISTORY);
     const historyList = Array.isArray(storedHistory) ? storedHistory : [];
-    const historyItem = {
-      id: workout.id || `workout_${Date.now()}`,
-      title: `${workout.sportLabel || (sport === SPORTS.RIDE ? "Riding" : "Running")} Session`,
-      sport,
-      startedAtMs: Number.isFinite(workout.startTime)
-        ? workout.startTime
-        : Date.now(),
-      distanceKm,
-      elapsedSeconds,
-      efficiencyValue: workout?.efficiencyValue || fallbackEfficiency.value,
-      efficiencyLabel: workout?.efficiencyLabel || fallbackEfficiency.label,
-    };
-    historyList.unshift(historyItem);
-    setStorageItem(STORAGE_KEYS.HISTORY, historyList.slice(0, HISTORY_LIMIT));
+    const workoutId = getWorkoutId(workout);
+
+    // Dedupe by workout id so a retry after an interrupted save cannot add the
+    // same workout to history twice.
+    if (!historyList.some((item) => item?.id === workoutId)) {
+      const historyItem = {
+        id: workoutId,
+        title: `${workout.sportLabel || (sport === SPORTS.RIDE ? "Riding" : "Running")} Session`,
+        sport,
+        startedAtMs: Number.isFinite(workout.startTime)
+          ? workout.startTime
+          : Date.now(),
+        dateLabel: "",
+        distanceKm,
+        elapsedSeconds,
+        efficiencyValue: workout?.efficiencyValue || fallbackEfficiency.value,
+        efficiencyLabel: workout?.efficiencyLabel || fallbackEfficiency.label,
+      };
+      historyList.unshift(historyItem);
+    }
+    if (
+      !setStorageItem(STORAGE_KEYS.HISTORY, historyList.slice(0, HISTORY_LIMIT))
+    ) {
+      if (saveError) {
+        saveError.textContent =
+          "Browser storage couldn't save this workout. Free space or enable site storage and try again.";
+        saveError.classList.remove("u-hidden");
+      }
+      return;
+    }
+
+    const streakResult = recordWorkoutStreak(
+      workout.endTime || workout.startTime,
+    );
+    if (!streakResult.persisted) {
+      if (saveError) {
+        saveError.textContent =
+          "The workout is in your history, but its streak couldn't be saved. Free browser storage and retry.";
+        saveError.classList.remove("u-hidden");
+      }
+      return;
+    }
+    const newStreak = streakResult.count;
+
+    // Saved comes last: it is the "done" flag for the reset button state.
+    workout.saved = true;
+    setStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT, workout);
+    setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
+    updateStreakDisplay();
 
     saveWorkoutBtn.disabled = true;
     const btnSpan = saveWorkoutBtn.querySelector("span") || saveWorkoutBtn;
     btnSpan.textContent = `Workout Saved! Streak: ${newStreak} Days ✓`;
+    if (saveError) saveError.classList.add("u-hidden");
   };
 
   if (saveWorkoutBtn) {
@@ -415,7 +467,7 @@ export const initCompleteScreen = function () {
         clearNavigation(summaryMapInstance);
         summaryMapInstance.remove();
       } catch (err) {
-        // Silently ignore unload errors
+        console.warn("Error removing summary map during unload:", err);
       }
       summaryMapInstance = null;
     }

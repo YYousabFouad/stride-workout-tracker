@@ -21,21 +21,25 @@ const bootstrap = async function () {
 
   // 2. Dynamically load only the controller for the active screen
   if (document.getElementById("view-plan")) {
+    // @ts-expect-error Browser module query parameter is a cache-busting suffix.
     const { initPlanWorkoutScreen } = await import("./screens/plan.js?v=2");
     initPlanWorkoutScreen();
   }
 
   if (document.getElementById("view-progress")) {
+    // @ts-expect-error Browser module query parameter is a cache-busting suffix.
     const { initProgressScreen } = await import("./screens/progress.js?v=2");
     initProgressScreen();
   }
 
   if (document.getElementById("view-complete")) {
+    // @ts-expect-error Browser module query parameter is a cache-busting suffix.
     const { initCompleteScreen } = await import("./screens/complete.js?v=2");
     initCompleteScreen();
   }
 
   if (document.getElementById("view-history")) {
+    // @ts-expect-error Browser module query parameter is a cache-busting suffix.
     const { initHistoryScreen } = await import("./screens/history.js?v=2");
     initHistoryScreen();
   }

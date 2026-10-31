@@ -10,8 +10,18 @@ export class Runner3D {
    * @param {HTMLElement} container
    */
   constructor(container) {
+    /** @type {HTMLElement|null} */
     this.container = container;
+    /** @type {THREE.Scene|null} */
+    this.scene = null;
+    /** @type {THREE.PerspectiveCamera|null} */
+    this.camera = null;
+    /** @type {THREE.WebGLRenderer|null} */
+    this.renderer = null;
+    /** @type {number} */
+    this.particleCount = 0;
     this.isRunning = false;
+    this.isIntersecting = true;
     this.animationFrameId = null;
     this.clock = new THREE.Clock();
 
@@ -28,19 +38,29 @@ export class Runner3D {
     this.animFrameCount = 0;
     this.lastWidth = 0;
     this.lastHeight = 0;
+    // Respect prefers-reduced-motion: skip the CPU-heavy wave field and slow
+    // the whole loop instead of rendering full-rate continuous motion.
+    this.reducedMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.renderStride = this.reducedMotion ? 5 : 1;
 
     this.init();
   }
 
   init() {
-    const width = this.container.clientWidth || 400;
-    const height = this.container.clientHeight || 320;
+    const container = this.container;
+    if (!container) return;
+    const width = container.clientWidth || 400;
+    const height = container.clientHeight || 320;
     this.isMobile =
       width < 600 || (window.innerWidth && window.innerWidth < 600);
 
     // 1. Scene & Atmospheric Fog
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x060d0c, 0.035);
+    const scene = this.scene;
+    if (!scene) return;
+    scene.fog = new THREE.FogExp2(0x060d0c, 0.035);
 
     // 2. Camera with responsive mobile framing (wider FOV on phones to fit runner)
     const initialFov = this.isMobile ? 54 : 46;
@@ -62,22 +82,25 @@ export class Runner3D {
     } catch {
       this.renderer = new THREE.WebGLRenderer({ alpha: true });
     }
-    this.renderer.setSize(width, height);
+    const renderer = this.renderer;
+    if (!renderer) return;
+    renderer.setSize(width, height);
     // High DPR and realtime shadows can overwhelm mobile GPUs and stall the
     // main thread, which also makes the overlaid controls appear unresponsive.
-    this.renderer.setPixelRatio(
+    renderer.setPixelRatio(
       Math.min(window.devicePixelRatio || 1, this.isMobile ? 1.25 : 2),
     );
-    this.renderer.shadowMap.enabled = !this.isMobile;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.enabled = !this.isMobile;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // Clean any existing canvas
-    this.container.querySelectorAll("canvas").forEach((c) => c.remove());
-    this.container.appendChild(this.renderer.domElement);
-    this.renderer.domElement.setAttribute("aria-hidden", "true");
+    container.querySelectorAll("canvas").forEach((c) => c.remove());
+    container.appendChild(renderer.domElement);
+    renderer.domElement.setAttribute("aria-hidden", "true");
 
     // Browsers may discard a WebGL context when a phone is backgrounded or
     // under memory pressure. Restart the loop when the context is restored.
+    /** @param {Event} event */
     this.onContextLost = (event) => {
       event.preventDefault();
       this.pause();
@@ -86,11 +109,11 @@ export class Runner3D {
       this.resize();
       if (!this.manuallyPaused) this.start();
     };
-    this.renderer.domElement.addEventListener(
+    renderer.domElement.addEventListener(
       "webglcontextlost",
       this.onContextLost,
     );
-    this.renderer.domElement.addEventListener(
+    renderer.domElement.addEventListener(
       "webglcontextrestored",
       this.onContextRestored,
     );
@@ -125,9 +148,12 @@ export class Runner3D {
   }
 
   setupLighting() {
+    const scene = this.scene;
+    if (!scene) return;
+
     // Ambient fill
     const ambientLight = new THREE.AmbientLight(0x0a1a18, 1.2);
-    this.scene.add(ambientLight);
+    scene.add(ambientLight);
 
     // Directional rim/key light
     const dirLight = new THREE.DirectionalLight(0xd0fffa, 1.8);
@@ -135,17 +161,17 @@ export class Runner3D {
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 1024;
     dirLight.shadow.mapSize.height = 1024;
-    this.scene.add(dirLight);
+    scene.add(dirLight);
 
     // Stride Brand Neon Underglow Light
     this.neonPointLight = new THREE.PointLight(0x00f0b5, 3.0, 15);
     this.neonPointLight.position.set(0, 1.2, 0);
-    this.scene.add(this.neonPointLight);
+    scene.add(this.neonPointLight);
 
     // Cyan Backlight
     const cyanBackLight = new THREE.PointLight(0x00d9f5, 2.0, 20);
     cyanBackLight.position.set(0, 3, -6);
-    this.scene.add(cyanBackLight);
+    scene.add(cyanBackLight);
   }
 
   setupMaterials() {
@@ -182,6 +208,9 @@ export class Runner3D {
   }
 
   setupRunway() {
+    const scene = this.scene;
+    if (!scene) return;
+
     this.runwayGroup = new THREE.Group();
 
     // Base runway floor
@@ -207,6 +236,7 @@ export class Runner3D {
     this.runwayGroup.add(rightRail);
 
     // Dynamic Moving Cross-Grid Bars
+    /** @type {THREE.Mesh[]} */
     this.gridBars = [];
     const barGeo = new THREE.BoxGeometry(5.4, 0.02, 0.08);
     const barMat = new THREE.MeshBasicMaterial({
@@ -224,10 +254,13 @@ export class Runner3D {
       this.gridBars.push(bar);
     }
 
-    this.scene.add(this.runwayGroup);
+    scene.add(this.runwayGroup);
   }
 
   setupVantaWaveField() {
+    const scene = this.scene;
+    if (!scene) return;
+
     // Dynamic Vanta WAVES-inspired mesh terrain surrounding the track
     const width = 42;
     const depth = 70;
@@ -256,10 +289,13 @@ export class Runner3D {
 
     this.vantaWaveMesh = new THREE.Mesh(waveGeo, waveMat);
     this.vantaWaveMesh.position.set(0, -0.42, 0);
-    this.scene.add(this.vantaWaveMesh);
+    scene.add(this.vantaWaveMesh);
   }
 
   setupSpeedParticles() {
+    const scene = this.scene;
+    if (!scene) return;
+
     // Mobile adaptive particle budget (140 on phones, 280 on desktop)
     this.particleCount = this.isMobile ? 140 : 280;
     const geometry = new THREE.BufferGeometry();
@@ -274,6 +310,7 @@ export class Runner3D {
     }
 
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    /** @type {Float32Array} */
     this.particleVelocities = velocities;
 
     const particleMat = new THREE.PointsMaterial({
@@ -285,11 +322,15 @@ export class Runner3D {
     });
 
     this.particles = new THREE.Points(geometry, particleMat);
-    this.scene.add(this.particles);
+    scene.add(this.particles);
   }
 
   setupRunnerModel() {
+    const scene = this.scene;
+    if (!scene) return;
+
     // Root anchor for entire humanoid
+    /** @type {THREE.Group} */
     this.runnerRoot = new THREE.Group();
     this.runnerRoot.position.set(0, 1.25, 0);
 
@@ -304,6 +345,7 @@ export class Runner3D {
     // ==========================================
     // Torso / Spine / Chest
     // ==========================================
+    /** @type {THREE.Group} */
     this.torso = new THREE.Group();
     this.torso.position.set(0, 0.18, 0);
 
@@ -336,6 +378,7 @@ export class Runner3D {
     neck.position.y = 0.65;
     this.torso.add(neck);
 
+    /** @type {THREE.Group} */
     this.head = new THREE.Group();
     this.head.position.set(0, 0.82, 0);
 
@@ -356,10 +399,12 @@ export class Runner3D {
     // ==========================================
     // Arms (Shoulders -> Elbows -> Forearms)
     // ==========================================
+    /** @type {THREE.Group & { elbow: THREE.Group }} */
     this.leftArm = this.createArm(-1); // Left
     this.leftArm.position.set(-0.35, 0.54, 0);
     this.torso.add(this.leftArm);
 
+    /** @type {THREE.Group & { elbow: THREE.Group }} */
     this.rightArm = this.createArm(1); // Right
     this.rightArm.position.set(0.35, 0.54, 0);
     this.torso.add(this.rightArm);
@@ -369,18 +414,22 @@ export class Runner3D {
     // ==========================================
     // Legs (Hips -> Knees -> Shins -> Feet)
     // ==========================================
+    /** @type {THREE.Group & { knee: THREE.Group, foot: THREE.Mesh }} */
     this.leftLeg = this.createLeg();
     this.leftLeg.position.set(-0.2, -0.05, 0);
     this.runnerRoot.add(this.leftLeg);
 
+    /** @type {THREE.Group & { knee: THREE.Group, foot: THREE.Mesh }} */
     this.rightLeg = this.createLeg();
     this.rightLeg.position.set(0.2, -0.05, 0);
     this.runnerRoot.add(this.rightLeg);
 
-    this.scene.add(this.runnerRoot);
+    scene.add(this.runnerRoot);
   }
 
+  /** @param {-1|1} side @returns {THREE.Group & { elbow: THREE.Group}} */
   createArm(side) {
+    /** @type {THREE.Group & { elbow?: THREE.Group }} */
     const shoulderGroup = new THREE.Group();
 
     // Shoulder joint ball
@@ -424,10 +473,12 @@ export class Runner3D {
     shoulderGroup.add(elbowGroup);
     shoulderGroup.elbow = elbowGroup;
 
-    return shoulderGroup;
+    return /** @type {THREE.Group & { elbow: THREE.Group }} */ (shoulderGroup);
   }
 
+  /** @returns {THREE.Group & { knee: THREE.Group, foot: THREE.Mesh }} */
   createLeg() {
+    /** @type {THREE.Group & { knee?: THREE.Group, foot?: THREE.Mesh }} */
     const hipGroup = new THREE.Group();
 
     // Hip joint
@@ -477,7 +528,9 @@ export class Runner3D {
     hipGroup.knee = kneeGroup;
     hipGroup.foot = foot;
 
-    return hipGroup;
+    return /** @type {THREE.Group & { knee: THREE.Group, foot: THREE.Mesh }} */ (
+      hipGroup
+    );
   }
 
   resize() {
@@ -503,17 +556,21 @@ export class Runner3D {
   }
 
   setupResizeObserver() {
+    const container = this.container;
+    if (!container) return;
     this.resizeObserver = new ResizeObserver(() => {
       this.resize();
     });
-    this.resizeObserver.observe(this.container);
+    this.resizeObserver.observe(container);
   }
 
   setupVisibilityObserver() {
-    if (!("IntersectionObserver" in window)) return;
+    const container = this.container;
+    if (!("IntersectionObserver" in window) || !container) return;
     this.visibilityObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
+          this.isIntersecting = entry.isIntersecting;
           if (entry.isIntersecting) {
             if (!this.isRunning && !this.manuallyPaused) {
               this.start();
@@ -527,21 +584,24 @@ export class Runner3D {
       },
       { threshold: 0.1 },
     );
-    this.visibilityObserver.observe(this.container);
+    this.visibilityObserver.observe(container);
   }
 
   setupPageVisibility() {
     this.onPageVisibilityChange = () => {
       if (document.hidden) {
         if (this.isRunning) this.pause();
-      } else if (!this.manuallyPaused) {
+      } else if (!this.manuallyPaused && this.isIntersecting) {
         this.start();
       }
     };
     document.addEventListener("visibilitychange", this.onPageVisibilityChange);
   }
 
+  /** @param {string} mode @param {boolean} [animated] */
   applyCameraPreset(mode, animated = true) {
+    const camera = this.camera;
+    if (!camera) return;
     this.cameraMode = mode;
     let target;
     let lookTarget;
@@ -566,34 +626,35 @@ export class Runner3D {
         this.activeCameraAnim.pause();
       }
       this.activeCameraAnim = window.anime({
-        targets: this.camera.position,
+        targets: camera.position,
         x: target.x,
         y: target.y,
         z: target.z,
         duration: 800,
         easing: "easeOutCubic",
         update: () => {
-          if (this.camera) {
-            this.camera.lookAt(lookTarget.x, lookTarget.y, lookTarget.z);
-          }
+          camera.lookAt(lookTarget.x, lookTarget.y, lookTarget.z);
         },
       });
     } else {
-      this.camera.position.set(target.x, target.y, target.z);
-      this.camera.lookAt(lookTarget.x, lookTarget.y, lookTarget.z);
+      camera.position.set(target.x, target.y, target.z);
+      camera.lookAt(lookTarget.x, lookTarget.y, lookTarget.z);
     }
   }
 
+  /** @param {string} sport */
   setSport(sport) {
     this.sport = sport === "ride" ? "ride" : "run";
     this.isRide = this.sport === "ride";
   }
 
+  /** @param {number} spm */
   setCadence(spm) {
     const val = Number(spm);
     this.cadence = Math.max(0, Math.min(240, isNaN(val) ? 0 : Math.round(val)));
   }
 
+  /** @param {number} kmh */
   setSpeed(kmh) {
     const val = Number(kmh);
     this.speed = Math.max(
@@ -603,6 +664,7 @@ export class Runner3D {
     this.isMoving = this.speed >= 0.8;
   }
 
+  /** @param {boolean} isMoving */
   setMoving(isMoving) {
     this.isMoving = Boolean(isMoving);
     if (!this.isMoving) {
@@ -611,7 +673,21 @@ export class Runner3D {
     }
   }
 
+  /** @param {number} delta */
   updateAnimation(delta) {
+    const { runnerRoot, torso, head, leftLeg, rightLeg, leftArm, rightArm } =
+      this;
+    if (
+      !runnerRoot ||
+      !torso ||
+      !head ||
+      !leftLeg ||
+      !rightLeg ||
+      !leftArm ||
+      !rightArm
+    ) {
+      return;
+    }
     // 0. Smooth blend between stopped idle (0.0) and active locomotion (1.0)
     const targetMotion = this.isMoving && this.speed >= 0.8 ? 1.0 : 0.0;
     const blendRate = targetMotion > this.motionWeight ? 4.5 : 3.0;
@@ -634,34 +710,33 @@ export class Runner3D {
       : (1 - Math.cos(cycle * 2)) * 0.055;
     const runPosY = isRide ? 1.15 + runBounce : 1.2 + runBounce;
     const idlePosY = 1.18 + breath * 0.008;
-    this.runnerRoot.position.y =
-      idlePosY + (runPosY - idlePosY) * this.motionWeight;
+    runnerRoot.position.y = idlePosY + (runPosY - idlePosY) * this.motionWeight;
 
     const runRotY = isRide ? Math.sin(cycle) * 0.03 : Math.sin(cycle) * 0.08;
     const runRotZ = isRide ? Math.sin(cycle) * 0.02 : Math.sin(cycle) * 0.035;
-    this.runnerRoot.rotation.y = runRotY * this.motionWeight;
-    this.runnerRoot.rotation.z = runRotZ * this.motionWeight;
+    runnerRoot.rotation.y = runRotY * this.motionWeight;
+    runnerRoot.rotation.z = runRotZ * this.motionWeight;
 
     const runTorsoX = isRide
       ? 0.36 + Math.sin(cycle * 2) * 0.015 // Aerodynamic cycling tuck
       : 0.2 + Math.sin(cycle * 2) * 0.02; // Forward athletic run lean
     const idleTorsoX = 0.04 + breath * 0.012;
-    this.torso.rotation.x =
+    torso.rotation.x =
       idleTorsoX + (runTorsoX - idleTorsoX) * this.motionWeight;
 
     const runTorsoY = isRide
       ? -Math.sin(cycle) * 0.03
       : -Math.sin(cycle) * 0.09;
-    this.torso.rotation.y = runTorsoY * this.motionWeight;
+    torso.rotation.y = runTorsoY * this.motionWeight;
 
     const runHeadX = isRide
       ? -0.22 - Math.sin(cycle * 2) * 0.01 // Head lifted to look ahead over bike
       : -0.12 - Math.sin(cycle * 2) * 0.015;
     const idleHeadX = -0.02;
-    this.head.rotation.x =
-      idleHeadX + (runHeadX - idleHeadX) * this.motionWeight;
+    head.rotation.x = idleHeadX + (runHeadX - idleHeadX) * this.motionWeight;
 
     // 2. Leg Kinematics (Running stride vs Cycling pedal revolution)
+    /** @param {THREE.Group & { knee: THREE.Group }} legGroup @param {number} phase */
     const animateLeg = (legGroup, phase) => {
       const phi = (cycle + phase) % (Math.PI * 2);
       let runHipRot;
@@ -692,10 +767,11 @@ export class Runner3D {
         idleKneeRot + (runKneeRot - idleKneeRot) * this.motionWeight;
     };
 
-    animateLeg(this.leftLeg, 0);
-    animateLeg(this.rightLeg, Math.PI);
+    animateLeg(leftLeg, 0);
+    animateLeg(rightLeg, Math.PI);
 
     // 3. Arm Kinematics (Counter-oscillation for running, handlebar reach for cycling)
+    /** @param {THREE.Group & { elbow: THREE.Group }} armGroup @param {number} phase */
     const animateArm = (armGroup, phase) => {
       const phi = (cycle + phase) % (Math.PI * 2);
       let runArmX;
@@ -720,8 +796,8 @@ export class Runner3D {
         idleElbowX + (runElbowX - idleElbowX) * this.motionWeight;
     };
 
-    animateArm(this.leftArm, 0);
-    animateArm(this.rightArm, Math.PI);
+    animateArm(leftArm, 0);
+    animateArm(rightArm, Math.PI);
 
     // 4. Infinite Runway Scrolling (Ground moving backwards under athlete towards -Z)
     const scrollSpeed = (this.speed / 3.6) * delta * 2.2 * this.motionWeight;
@@ -737,7 +813,7 @@ export class Runner3D {
 
     // 5. Particle Speed Warp Field (Particles rushing past towards -Z)
     if (this.particles) {
-      const pos = this.particles.geometry.attributes.position.array;
+      const positions = this.particles.geometry.attributes.position;
       const activeParticleSpeed = (this.speed / 3.6) * delta * 4.5;
       const ambientParticleSpeed = delta * 0.35;
       const particleSpeed =
@@ -745,14 +821,18 @@ export class Runner3D {
         (activeParticleSpeed - ambientParticleSpeed) * this.motionWeight;
 
       for (let i = 0; i < this.particleCount; i++) {
-        pos[i * 3 + 2] -= this.particleVelocities[i] * particleSpeed * 0.1;
-        if (pos[i * 3 + 2] < -35) {
-          pos[i * 3 + 2] = 20;
-          pos[i * 3 + 0] = (Math.random() - 0.5) * 14;
-          pos[i * 3 + 1] = Math.random() * 6 + 0.1;
+        const nextZ =
+          positions.getZ(i) -
+          (this.particleVelocities[i] || 0) * particleSpeed * 0.1;
+        if (nextZ < -35) {
+          positions.setZ(i, 20);
+          positions.setX(i, (Math.random() - 0.5) * 14);
+          positions.setY(i, Math.random() * 6 + 0.1);
+        } else {
+          positions.setZ(i, nextZ);
         }
       }
-      this.particles.geometry.attributes.position.needsUpdate = true;
+      positions.needsUpdate = true;
     }
 
     // 6. Neon Underglow Pulse
@@ -764,7 +844,7 @@ export class Runner3D {
     }
 
     // 7. Dynamic Camera Follow
-    if (this.cameraMode === "follow") {
+    if (this.cameraMode === "follow" && this.camera) {
       const runCamX = Math.sin(cycle) * 0.08;
       const runCamY = 3.1 + runBounce * 0.35;
       this.camera.position.x = runCamX * this.motionWeight;
@@ -775,13 +855,15 @@ export class Runner3D {
     // 8. Vanta Wave Field Dynamic Undulation
     if (this.vantaWaveMesh && this.waveOrigPositions) {
       // Throttle wave vertex recalculations on mobile or during idle to save CPU/GPU bandwidth
-      const shouldUpdateWave = !this.isMobile || this.animFrameCount % 2 === 0;
+      const shouldUpdateWave =
+        !this.reducedMotion &&
+        (!this.isMobile || this.animFrameCount % 2 === 0);
       if (shouldUpdateWave) {
-        const pos = this.vantaWaveMesh.geometry.attributes.position.array;
+        const positions = this.vantaWaveMesh.geometry.attributes.position;
         const orig = this.waveOrigPositions;
         const waveT = elapsed * 0.3 + this.stridePhase * 0.4;
 
-        const count = pos.length / 3;
+        const count = positions.count;
         for (let i = 0; i < count; i++) {
           const x = orig[i * 3 + 0];
           const z = orig[i * 3 + 2];
@@ -798,19 +880,28 @@ export class Runner3D {
           const wave2 = Math.cos(z * 0.22 + waveT * 2.0);
           const wave3 = Math.sin((x + z) * 0.26 + waveT * 0.85);
 
-          pos[i * 3 + 1] =
+          positions.setY(
+            i,
             orig[i * 3 + 1] +
-            (wave1 * 0.42 + wave2 * 0.38 + wave3 * 0.28) * waveWeight;
+              (wave1 * 0.42 + wave2 * 0.38 + wave3 * 0.28) * waveWeight,
+          );
         }
-        this.vantaWaveMesh.geometry.attributes.position.needsUpdate = true;
+        positions.needsUpdate = true;
       }
     }
   }
 
   render() {
     if (!this.isRunning) return;
+    if (!this.camera || !this.renderer || !this.scene) return;
 
     this.animFrameCount = (this.animFrameCount + 1) | 0;
+    // Reduced motion: keep the canvas live but update only every few frames
+    // so the scene does not continuously sprint at display refresh rate.
+    if (this.animFrameCount % this.renderStride !== 0) {
+      this.animationFrameId = requestAnimationFrame(() => this.render());
+      return;
+    }
     const delta = Math.min(this.clock.getDelta(), 0.1);
     this.updateAnimation(delta);
 
@@ -851,7 +942,9 @@ export class Runner3D {
     if (this.clock) {
       try {
         this.clock.stop();
-      } catch {}
+      } catch (err) {
+        console.warn("Error stopping runner animation clock:", err);
+      }
     }
     if (
       this.activeCameraAnim &&
@@ -878,21 +971,18 @@ export class Runner3D {
     if (this.scene) {
       const disposedMats = new Set();
       this.scene.traverse((obj) => {
-        if (obj.geometry) {
-          obj.geometry.dispose();
-        }
-        if (obj.material) {
-          if (Array.isArray(obj.material)) {
-            obj.material.forEach((m) => {
-              if (m && !disposedMats.has(m)) {
-                disposedMats.add(m);
-                m.dispose();
-              }
-            });
-          } else if (!disposedMats.has(obj.material)) {
-            disposedMats.add(obj.material);
-            obj.material.dispose();
-          }
+        if (!(obj instanceof THREE.Mesh)) return;
+        obj.geometry.dispose();
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach((m) => {
+            if (m && !disposedMats.has(m)) {
+              disposedMats.add(m);
+              m.dispose();
+            }
+          });
+        } else if (!disposedMats.has(obj.material)) {
+          disposedMats.add(obj.material);
+          obj.material.dispose();
         }
       });
       disposedMats.clear();

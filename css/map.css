@@ -22,6 +22,17 @@
   border: 1px solid var(--color-border-subtle);
 }
 
+.map-preview-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: var(--space-6);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
 /* Subtle Dark Grid Background Pattern matching Figma */
 .map-grid-layer {
   position: absolute;

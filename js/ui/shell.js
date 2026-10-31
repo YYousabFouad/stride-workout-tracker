@@ -61,6 +61,7 @@ const getCurrentPage = function () {
   return filename && ALLOWED_PAGES.has(filename) ? filename : "index.html";
 };
 
+/** @param {string} currentPage @returns {string} */
 const renderNavbar = function (currentPage) {
   const desktopPills = NAV_ITEMS.map((item) => {
     const isActive = item.href === currentPage;
@@ -117,6 +118,7 @@ const renderNavbar = function (currentPage) {
       </div>`;
 };
 
+/** @param {string} currentPage @returns {string} */
 const renderMobileNav = function (currentPage) {
   return NAV_ITEMS.map((item) => {
     const isActive = item.href === currentPage;
@@ -210,7 +212,11 @@ const renderAccountModal = function () {
                 required
               />
             </div>
-
+            <p
+              id="account-storage-error"
+              class="form-hint u-hidden"
+              role="alert"
+            ></p>
           </div>
 
           <div class="modal-footer">

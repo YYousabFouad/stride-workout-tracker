@@ -22,6 +22,19 @@
   text-align: center !important;
 }
 
+.u-opacity-40 {
+  opacity: 0.4 !important;
+}
+
+.u-hidden {
+  display: none;
+}
+
+.u-mx-auto {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
 .u-flex {
   display: flex !important;
 }

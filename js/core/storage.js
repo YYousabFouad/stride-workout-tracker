@@ -3,39 +3,127 @@
  * Single source of truth for localStorage keys, domain constants, and data transformations.
  */
 
-export const STORAGE_KEYS = {
+/** @typedef {[number, number]} Coordinate */
+/** @typedef {"run" | "ride"} Sport */
+/** @typedef {"distance" | "time"} GoalType */
+/** @typedef {"in_progress" | "complete"} WorkoutStatus */
+/**
+ * @typedef {Object} Workout
+ * @property {string} [id]
+ * @property {Sport} sport
+ * @property {string} sportLabel
+ * @property {GoalType} goal
+ * @property {number} targetValue
+ * @property {"km" | "min"} targetUnit
+ * @property {number} startTime
+ * @property {WorkoutStatus} status
+ * @property {boolean} saved
+ * @property {Coordinate[]} routeCoords
+ * @property {number} gpsDistanceKm
+ * @property {number} [endTime]
+ * @property {number} [elapsedSeconds]
+ * @property {number} [distanceKm]
+ * @property {string} [finalDuration]
+ * @property {string} [finalDistance]
+ * @property {string} [efficiencyValue]
+ * @property {string} [efficiencyLabel]
+ * @property {boolean} [targetReached]
+ */
+/** @typedef {{ count: number, lastActivity: string|null }} StoredStreakState */
+/**
+ * @typedef {Object} UserProfile
+ * @property {string} username
+ * @property {string} email
+ * @property {number} createdAt
+ * @property {number} updatedAt
+ */
+/**
+ * @typedef {Object} HistoryItem
+ * @property {string} id
+ * @property {string} title
+ * @property {Sport} sport
+ * @property {number | null} startedAtMs
+ * @property {string} dateLabel
+ * @property {number | null} distanceKm
+ * @property {number | null} elapsedSeconds
+ * @property {string} efficiencyValue
+ * @property {string} efficiencyLabel
+ */
+
+export const STORAGE_KEYS = /** @type {const} */ ({
   ACTIVE_WORKOUT: "stride_active_workout",
   COMPLETED_WORKOUT: "stride_completed_workout",
   HISTORY: "stride_history",
   STREAK: "stride_streak",
   STREAK_LAST_ACTIVITY: "stride_streak_last_activity",
+  STREAK_STATE: "stride_streak_state",
   USER: "stride_user",
   LAST_LOCATION: "stride_last_location",
   SCHEMA_VERSION: "stride_schema_version",
+});
+
+/**
+ * Values returned for known local-storage keys after validation.
+ * @typedef {Object} StorageValueMap
+ * @property {Workout|null} stride_active_workout
+ * @property {Workout|null} stride_completed_workout
+ * @property {HistoryItem[]} stride_history
+ * @property {number|string|null} stride_streak
+ * @property {string|null} stride_streak_last_activity
+ * @property {StoredStreakState|null} stride_streak_state
+ * @property {UserProfile|null} stride_user
+ * @property {Coordinate|null} stride_last_location
+ * @property {number|string|null} stride_schema_version
+ */
+
+/**
+ * Monotonic version of the persisted data shape. Every shape change must have
+ * an additive or backward-compatible step in `migrateStoredSchema`.
+ * @type {number}
+ */
+export const SCHEMA_VERSION = 2;
+
+/**
+ * Create a collision-resistant id for a workout record.
+ * @returns {string}
+ */
+export const createWorkoutId = function () {
+  const randomUUID = globalThis.crypto?.randomUUID;
+  if (typeof randomUUID === "function") {
+    return `workout_${randomUUID.call(globalThis.crypto)}`;
+  }
+  return `workout_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 };
 
 /**
- * Monotonic version of the persisted data shape. Bump only for incompatible
- * changes, and add a matching step to `migrateStoredSchema`.
- * @type {number}
+ * Return a stable identifier for a workout, including legacy records created
+ * before workout IDs were persisted. The legacy fallback is deterministic so
+ * retries after a partial save deduplicate the same history entry.
+ * @param {Workout} workout
+ * @returns {string}
  */
-export const SCHEMA_VERSION = 1;
+export const getWorkoutId = function (workout) {
+  return workout.id || `workout_legacy_${workout.startTime}`;
+};
 
 /** Hard ceiling on persisted history entries (defends against quota exhaustion). */
 export const HISTORY_LIMIT = 50;
 
+/** Bound raw history entries inspected when sanitizing corrupt stored arrays. */
+const HISTORY_RAW_SCAN_LIMIT = HISTORY_LIMIT * 4;
+
 /** Hard ceiling on persisted/decimated GPS route points. */
 export const ROUTE_POINT_LIMIT = 500;
 
-export const SPORTS = {
+export const SPORTS = /** @type {const} */ ({
   RUN: "run",
   RIDE: "ride",
-};
+});
 
-export const GOAL_TYPES = {
+export const GOAL_TYPES = /** @type {const} */ ({
   DISTANCE: "distance",
   TIME: "time",
-};
+});
 
 /**
  * Shared display and validation settings for workout targets.
@@ -64,7 +152,10 @@ export const GOAL_TARGETS = {
  * @returns {string}
  */
 export const formatTime = function (totalSeconds) {
-  const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const parsedSeconds = Number(totalSeconds);
+  const safeSeconds = Number.isFinite(parsedSeconds)
+    ? Math.max(0, Math.floor(parsedSeconds))
+    : 0;
   const hours = Math.floor(safeSeconds / 3600);
   const mins = Math.floor((safeSeconds % 3600) / 60);
   const secs = safeSeconds % 60;
@@ -85,10 +176,12 @@ export const formatTime = function (totalSeconds) {
  * @returns {string}
  */
 export const formatDistance = function (distanceKm) {
-  const safeKm = Math.max(0, Number(distanceKm) || 0);
+  const parsedKm = Number(distanceKm);
+  const safeKm = Number.isFinite(parsedKm) ? Math.max(0, parsedKm) : 0;
   return `${safeKm.toFixed(1)} km`;
 };
 
+/** @param {Date} date @returns {number} */
 const startOfLocalDay = function (date) {
   return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
 };
@@ -144,6 +237,7 @@ export const calculateHaversineKm = function (coordA, coordB) {
     return 0;
   }
   const R = 6371; // Earth radius in km
+  /** @param {number} deg @returns {number} */
   const toRad = (deg) => (deg * Math.PI) / 180;
 
   const dLat = toRad(lat2 - lat1);
@@ -171,8 +265,10 @@ export const calculateEfficiencyMetric = function (
   elapsedSeconds,
   sport,
 ) {
-  const safeKm = Math.max(0, Number(distanceKm) || 0);
-  const safeSec = Math.max(0, Number(elapsedSeconds) || 0);
+  const parsedKm = Number(distanceKm);
+  const parsedSec = Number(elapsedSeconds);
+  const safeKm = Number.isFinite(parsedKm) ? Math.max(0, parsedKm) : 0;
+  const safeSec = Number.isFinite(parsedSec) ? Math.max(0, parsedSec) : 0;
 
   if (sport === SPORTS.RIDE) {
     const speedKmh =
@@ -198,7 +294,7 @@ export const calculateEfficiencyMetric = function (
  */
 export const sanitizeTarget = function (rawValue, goal) {
   const settings = GOAL_TARGETS[goal] || GOAL_TARGETS[GOAL_TYPES.DISTANCE];
-  const parsed = parseFloat(rawValue);
+  const parsed = parseFloat(String(rawValue));
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return Number(settings.defaultValue);
   }
@@ -207,8 +303,8 @@ export const sanitizeTarget = function (rawValue, goal) {
 
 /**
  * Whitelist sport against valid domain options
- * @param {string} rawSport
- * @returns {'run'|'ride'}
+ * @param {unknown} rawSport
+ * @returns {Sport}
  */
 export const sanitizeSport = function (rawSport) {
   return rawSport === SPORTS.RIDE ? SPORTS.RIDE : SPORTS.RUN;
@@ -216,13 +312,14 @@ export const sanitizeSport = function (rawSport) {
 
 /**
  * Whitelist workout goal against valid domain options
- * @param {string} rawGoal
- * @returns {'distance'|'time'}
+ * @param {unknown} rawGoal
+ * @returns {GoalType}
  */
 export const sanitizeGoal = function (rawGoal) {
   return rawGoal === GOAL_TYPES.TIME ? GOAL_TYPES.TIME : GOAL_TYPES.DISTANCE;
 };
 
+/** @param {unknown} coordinate @returns {coordinate is Coordinate} */
 const isValidCoordinate = function (coordinate) {
   return (
     Array.isArray(coordinate) &&
@@ -240,9 +337,9 @@ const isValidCoordinate = function (coordinate) {
  * Reduce a coordinate array to at most `maxPoints`, always preserving the first
  * and last points so the drawn route keeps its true start and finish.
  * Shared by the live tracker and both persistence paths (CWE-400).
- * @param {[number, number][]} coordinates
+ * @param {Coordinate[]} coordinates
  * @param {number} [maxPoints]
- * @returns {any[]}
+ * @returns {Coordinate[]}
  */
 export const decimateRoute = function (
   coordinates,
@@ -252,49 +349,118 @@ export const decimateRoute = function (
   const limit = Math.max(2, Math.floor(Number(maxPoints) || ROUTE_POINT_LIMIT));
   if (coordinates.length <= limit) return coordinates;
 
-  const step = Math.ceil((coordinates.length - 1) / (limit - 1));
-  const decimated = coordinates.filter((_, index) => index % step === 0);
-  const last = coordinates[coordinates.length - 1];
-  if (decimated[decimated.length - 1] !== last) {
-    decimated.push(last);
+  // Uniform index sampling: always emits exactly `limit` points including the
+  // first and last. The previous `index % step` filter kept only ~half the
+  // requested points for arrays just over the limit (501 -> 251).
+  const lastIndex = coordinates.length - 1;
+  /** @type {Coordinate[]} */
+  const decimated = [];
+  for (let i = 0; i < limit; i++) {
+    decimated.push(coordinates[Math.round((i * lastIndex) / (limit - 1))]);
   }
   return decimated;
 };
 
+/** Upper bound on raw coordinate scanning before decimation bounds output. */
+export const ROUTE_RAW_SCAN_LIMIT = ROUTE_POINT_LIMIT * 4;
+
+/** @param {unknown} coordinates @returns {Coordinate[]} */
 const sanitizeRouteCoords = function (coordinates) {
   if (!Array.isArray(coordinates)) return [];
-  return decimateRoute(coordinates.filter(isValidCoordinate));
+  // Bound raw entries inspected as well as valid points collected. An array
+  // containing only invalid entries must not force a full scan on every read.
+  const valid = [];
+  const scanLimit = Math.min(coordinates.length, ROUTE_RAW_SCAN_LIMIT);
+  for (let index = 0; index < scanLimit; index++) {
+    const coordinate = coordinates[index];
+    if (isValidCoordinate(coordinate)) {
+      valid.push(coordinate);
+    }
+  }
+  return decimateRoute(valid);
 };
 
+/**
+ * @param {unknown} value
+ * @param {string} key
+ * @returns {Workout|null}
+ */
 const sanitizeWorkout = function (value, key) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  if (!Number.isFinite(value.startTime) || value.startTime <= 0) return null;
+  const record = /** @type {Record<string, unknown>} */ (value);
+  if (
+    typeof record.startTime !== "number" ||
+    !Number.isFinite(record.startTime) ||
+    record.startTime <= 0
+  ) {
+    return null;
+  }
 
-  const status = value.status;
+  const status = record.status;
   if (status !== "in_progress" && status !== "complete") return null;
   if (key === STORAGE_KEYS.COMPLETED_WORKOUT && status !== "complete")
     return null;
 
-  const goal = sanitizeGoal(value.goal);
+  const goal = sanitizeGoal(record.goal);
+  const sport = sanitizeSport(record.sport);
   return {
-    ...value,
-    sport: sanitizeSport(value.sport),
-    sportLabel: value.sport === SPORTS.RIDE ? "Riding" : "Running",
+    ...(typeof record.id === "string" ? { id: record.id.slice(0, 64) } : {}),
+    sport,
+    sportLabel: sport === SPORTS.RIDE ? "Riding" : "Running",
     goal,
-    targetValue: sanitizeTarget(value.targetValue, goal),
+    targetValue: sanitizeTarget(
+      typeof record.targetValue === "string" ||
+        typeof record.targetValue === "number"
+        ? record.targetValue
+        : "",
+      goal,
+    ),
     targetUnit: goal === GOAL_TYPES.TIME ? "min" : "km",
-    startTime: value.startTime,
+    startTime: record.startTime,
     status,
-    saved: value.saved === true,
-    routeCoords: sanitizeRouteCoords(value.routeCoords),
+    saved: record.saved === true,
+    routeCoords: sanitizeRouteCoords(record.routeCoords),
     gpsDistanceKm:
-      Number.isFinite(value.gpsDistanceKm) && value.gpsDistanceKm >= 0
-        ? value.gpsDistanceKm
+      typeof record.gpsDistanceKm === "number" &&
+      Number.isFinite(record.gpsDistanceKm) &&
+      record.gpsDistanceKm >= 0
+        ? record.gpsDistanceKm
         : 0,
+    ...(typeof record.endTime === "number" &&
+    Number.isFinite(record.endTime) &&
+    record.endTime >= record.startTime
+      ? { endTime: record.endTime }
+      : {}),
+    ...(typeof record.elapsedSeconds === "number" &&
+    Number.isFinite(record.elapsedSeconds) &&
+    record.elapsedSeconds >= 0
+      ? { elapsedSeconds: record.elapsedSeconds }
+      : {}),
+    ...(typeof record.distanceKm === "number" &&
+    Number.isFinite(record.distanceKm) &&
+    record.distanceKm >= 0
+      ? { distanceKm: record.distanceKm }
+      : {}),
+    ...(typeof record.finalDuration === "string"
+      ? { finalDuration: record.finalDuration.slice(0, 32) }
+      : {}),
+    ...(typeof record.finalDistance === "string"
+      ? { finalDistance: record.finalDistance.slice(0, 32) }
+      : {}),
+    ...(typeof record.efficiencyValue === "string"
+      ? { efficiencyValue: record.efficiencyValue.slice(0, 32) }
+      : {}),
+    ...(typeof record.efficiencyLabel === "string"
+      ? { efficiencyLabel: record.efficiencyLabel.slice(0, 32) }
+      : {}),
+    ...(typeof record.targetReached === "boolean"
+      ? { targetReached: record.targetReached }
+      : {}),
   };
 };
 
 /** Coerce legacy/unknown scalars to bounded, printable text. */
+/** @param {unknown} value @returns {string} */
 const toText = function (value) {
   if (typeof value === "string") return value;
   if (value === null || value === undefined) return "";
@@ -337,49 +503,117 @@ const parseDurationLabel = function (label) {
  * display string with no year, so it cannot be converted without inventing
  * data; it is preserved verbatim as `dateLabel`.
  * @param {unknown} item
- * @returns {object|null} null when the entry is unusable
+ * @returns {HistoryItem|null} null when the entry is unusable
  */
 const sanitizeHistoryItem = function (item) {
   if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+  const record = /** @type {Record<string, unknown>} */ (item);
 
   const startedAtMs =
-    Number.isFinite(item.startedAtMs) && item.startedAtMs > 0
-      ? Math.floor(item.startedAtMs)
+    typeof record.startedAtMs === "number" &&
+    Number.isFinite(record.startedAtMs) &&
+    record.startedAtMs > 0
+      ? Math.floor(record.startedAtMs)
       : null;
 
   const distanceKm =
-    Number.isFinite(item.distanceKm) && item.distanceKm >= 0
-      ? Number(item.distanceKm)
-      : parseDistanceLabel(item.distance);
+    typeof record.distanceKm === "number" &&
+    Number.isFinite(record.distanceKm) &&
+    record.distanceKm >= 0
+      ? record.distanceKm
+      : parseDistanceLabel(record.distance);
 
   const elapsedSeconds =
-    Number.isFinite(item.elapsedSeconds) && item.elapsedSeconds > 0
-      ? Math.floor(item.elapsedSeconds)
-      : parseDurationLabel(item.duration);
+    typeof record.elapsedSeconds === "number" &&
+    Number.isFinite(record.elapsedSeconds) &&
+    record.elapsedSeconds > 0
+      ? Math.floor(record.elapsedSeconds)
+      : parseDurationLabel(record.duration);
 
   return {
-    id: typeof item.id === "string" ? item.id.slice(0, 64) : "",
-    title: sanitizeString(toText(item.title), 80) || "Workout",
-    sport: sanitizeSport(item.sport),
+    id: typeof record.id === "string" ? record.id.slice(0, 64) : "",
+    title: sanitizeString(toText(record.title), 80) || "Workout",
+    sport: sanitizeSport(record.sport),
     startedAtMs,
     // Empty when `startedAtMs` is known: the label is derived at render time.
     dateLabel:
       startedAtMs === null
-        ? sanitizeString(toText(item.dateLabel ?? item.date), 40)
+        ? sanitizeString(toText(record.dateLabel ?? record.date), 40)
         : "",
     distanceKm,
     elapsedSeconds,
-    efficiencyValue: sanitizeString(toText(item.efficiencyValue), 16),
-    efficiencyLabel: sanitizeString(toText(item.efficiencyLabel), 32),
+    efficiencyValue: sanitizeString(toText(record.efficiencyValue), 16),
+    efficiencyLabel: sanitizeString(toText(record.efficiencyLabel), 32),
   };
 };
 
 /** Bound, validate, and normalize the whole history array on every read. */
+/** @param {unknown} value @returns {HistoryItem[]} */
 const sanitizeHistory = function (value) {
   if (!Array.isArray(value)) return [];
-  return value.map(sanitizeHistoryItem).filter(Boolean).slice(0, HISTORY_LIMIT);
+  // Bound raw entries inspected as well as valid items collected. Injected
+  // arrays with mostly invalid entries must not saturate the main thread.
+  /** @type {HistoryItem[]} */
+  const bounded = [];
+  const scanLimit = Math.min(value.length, HISTORY_RAW_SCAN_LIMIT);
+  for (let index = 0; index < scanLimit; index++) {
+    const candidate = value[index];
+    const item = sanitizeHistoryItem(candidate);
+    if (item) {
+      bounded.push(item);
+      if (bounded.length >= HISTORY_LIMIT) break;
+    }
+  }
+  return bounded;
 };
 
+/** @param {unknown} value @returns {StoredStreakState|null} */
+const sanitizeStreakState = function (value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = /** @type {Record<string, unknown>} */ (value);
+  if (
+    typeof record.count !== "number" ||
+    !Number.isFinite(record.count) ||
+    record.count < 0 ||
+    (typeof record.lastActivity !== "string" && record.lastActivity !== null)
+  ) {
+    return null;
+  }
+  return {
+    count: Math.floor(record.count),
+    lastActivity: record.lastActivity,
+  };
+};
+
+/** @param {unknown} value @returns {UserProfile|null} */
+const sanitizeUserProfile = function (value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = /** @type {Record<string, unknown>} */ (value);
+  const username = sanitizeString(toText(record.username), 50);
+  const email = sanitizeString(toText(record.email), 100);
+  if (!username || !email) return null;
+
+  const createdAt =
+    typeof record.createdAt === "number" &&
+    Number.isFinite(record.createdAt) &&
+    record.createdAt >= 0
+      ? record.createdAt
+      : 0;
+  const updatedAt =
+    typeof record.updatedAt === "number" &&
+    Number.isFinite(record.updatedAt) &&
+    record.updatedAt >= 0
+      ? record.updatedAt
+      : createdAt;
+  return { username, email, createdAt, updatedAt };
+};
+
+/**
+ * Validate one persisted value before it reaches an application consumer.
+ * @param {keyof StorageValueMap} key
+ * @param {unknown} value
+ * @returns {unknown}
+ */
 const validateStoredValue = function (key, value) {
   if (
     key === STORAGE_KEYS.ACTIVE_WORKOUT ||
@@ -392,6 +626,25 @@ const validateStoredValue = function (key, value) {
   }
   if (key === STORAGE_KEYS.HISTORY) {
     return sanitizeHistory(value);
+  }
+  if (key === STORAGE_KEYS.STREAK_STATE) {
+    return sanitizeStreakState(value);
+  }
+  if (key === STORAGE_KEYS.USER) {
+    return sanitizeUserProfile(value);
+  }
+  if (key === STORAGE_KEYS.STREAK) {
+    return typeof value === "number" || typeof value === "string"
+      ? value
+      : null;
+  }
+  if (key === STORAGE_KEYS.STREAK_LAST_ACTIVITY) {
+    return typeof value === "string" ? value : null;
+  }
+  if (key === STORAGE_KEYS.SCHEMA_VERSION) {
+    return typeof value === "number" || typeof value === "string"
+      ? value
+      : null;
   }
   return value;
 };
@@ -413,7 +666,7 @@ export const sanitizeString = function (str, maxLength = 50) {
 /**
  * Safely parse JSON strings with reviver guarding against Prototype Pollution (CWE-1321)
  * @param {string} raw
- * @returns {any|null}
+ * @returns {unknown|null}
  */
 export const safeJsonParse = function (raw) {
   if (!raw || typeof raw !== "string") return null;
@@ -432,18 +685,25 @@ export const safeJsonParse = function (raw) {
 /**
  * In-memory fallback map for environments where localStorage is blocked (e.g. strict private browsing)
  */
+/** @type {Map<string, unknown>} */
 const memoryStorageFallback = new Map();
+/** @type {Set<string>} */
 const failedStorageWrites = new Set();
 
 /**
  * Safely parse JSON from localStorage with prototype pollution protection and memory fallback
- * @param {string} key
- * @returns {any|null}
+ * @template {keyof StorageValueMap} K
+ * @param {K} key
+ * @returns {StorageValueMap[K]}
  */
 export const getStorageItem = function (key) {
+  /** @param {unknown} value @returns {StorageValueMap[K]} */
+  const validate = (value) =>
+    /** @type {StorageValueMap[K]} */ (validateStoredValue(key, value));
+
   // A failed write makes the in-memory value newer than any persisted value.
   if (failedStorageWrites.has(key)) {
-    return validateStoredValue(key, memoryStorageFallback.get(key) ?? null);
+    return validate(memoryStorageFallback.get(key) ?? null);
   }
 
   try {
@@ -451,30 +711,34 @@ export const getStorageItem = function (key) {
       typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
     if (raw) {
       const parsed = safeJsonParse(raw);
-      if (parsed !== null) return validateStoredValue(key, parsed);
+      if (parsed !== null) return validate(parsed);
     }
-    return validateStoredValue(key, memoryStorageFallback.get(key) ?? null);
+    return validate(memoryStorageFallback.get(key) ?? null);
   } catch (err) {
     console.warn(
       `Storage access restricted for ${key}, falling back to memory:`,
       err,
     );
-    return validateStoredValue(key, memoryStorageFallback.get(key) ?? null);
+    return validate(memoryStorageFallback.get(key) ?? null);
   }
 };
 
 /**
  * Safely write JSON to localStorage with quota-exceeded mitigation and memory fallback
- * @param {string} key
- * @param {any} value
+ * @template {keyof StorageValueMap} K
+ * @param {K} key
+ * @param {StorageValueMap[K]} value
+ * @returns {boolean} true when persisted to localStorage, false for memory-only fallback
  */
 export const setStorageItem = function (key, value) {
   try {
-    if (typeof localStorage !== "undefined") {
+    const hasLocalStorage = typeof localStorage !== "undefined";
+    if (hasLocalStorage) {
       localStorage.setItem(key, JSON.stringify(value));
     }
     memoryStorageFallback.set(key, value);
     failedStorageWrites.delete(key);
+    return hasLocalStorage;
   } catch (err) {
     memoryStorageFallback.set(key, value);
     failedStorageWrites.add(key);
@@ -483,19 +747,57 @@ export const setStorageItem = function (key, value) {
       err,
     );
     try {
-      // If quota exceeded, prune older historical logs to preserve active and current state
+      // Last-resort quota mitigation: prune older history so the current
+      // write can succeed. Logged so data loss is visible, never silent.
       const history = getStorageItem(STORAGE_KEYS.HISTORY);
       if (Array.isArray(history) && history.length > 10) {
+        console.warn(
+          `Storage full: pruning history from ${history.length} to 10 entries to fit the new value.`,
+        );
+        const prunedHistory =
+          key === STORAGE_KEYS.HISTORY && Array.isArray(value)
+            ? value.slice(0, 10)
+            : history.slice(0, 10);
         localStorage.setItem(
           STORAGE_KEYS.HISTORY,
-          JSON.stringify(history.slice(0, 10)),
+          JSON.stringify(prunedHistory),
         );
-        localStorage.setItem(key, JSON.stringify(value));
+        memoryStorageFallback.set(STORAGE_KEYS.HISTORY, prunedHistory);
+        failedStorageWrites.delete(STORAGE_KEYS.HISTORY);
+        if (key !== STORAGE_KEYS.HISTORY) {
+          localStorage.setItem(key, JSON.stringify(value));
+        }
         failedStorageWrites.delete(key);
+        return true;
       }
-    } catch {
-      // Memory fallback is safely preserved
+    } catch (recoveryError) {
+      console.warn(
+        `Storage quota recovery failed for ${key}; keeping the value in memory:`,
+        recoveryError,
+      );
     }
+    return false;
+  }
+};
+
+/**
+ * Remove a key from localStorage and the in-memory fallback.
+ * Used to drop privacy-sensitive state once it is no longer needed.
+ * @param {keyof StorageValueMap} key
+ */
+export const removeStorageItem = function (key) {
+  memoryStorageFallback.delete(key);
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(key);
+    }
+    failedStorageWrites.delete(key);
+  } catch (err) {
+    // Keep a tombstone so a stale persisted value cannot reappear on the next
+    // read when removal is denied but reads still work.
+    memoryStorageFallback.set(key, null);
+    failedStorageWrites.add(key);
+    console.warn(`Storage removal restricted for ${key}:`, err);
   }
 };
 
@@ -503,15 +805,50 @@ export const setStorageItem = function (key, value) {
  * Resolve the workout the Complete/Streak screens should summarize.
  * Returns null while a session is still in progress, or when none exists.
  * Single source of truth for "which workout is on screen".
- * @returns {object|null}
+ * @returns {Workout|null}
  */
 export const getCurrentWorkout = function () {
   const activeWorkout = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
-  if (activeWorkout) {
-    return activeWorkout.status === "complete" ? activeWorkout : null;
-  }
   const completedWorkout = getStorageItem(STORAGE_KEYS.COMPLETED_WORKOUT);
+
+  if (activeWorkout?.status === "complete") return activeWorkout;
+  if (activeWorkout?.status === "in_progress") {
+    return isSameWorkoutSession(activeWorkout, completedWorkout) &&
+      completedWorkout?.status === "complete"
+      ? completedWorkout
+      : null;
+  }
   return completedWorkout?.status === "complete" ? completedWorkout : null;
+};
+
+/**
+ * Compare workout identity, falling back to start time only for legacy records
+ * where neither record has an id.
+ * @param {Workout|null} first
+ * @param {Workout|null} second
+ * @returns {boolean}
+ */
+export const isSameWorkoutSession = function (first, second) {
+  if (!first || !second) return false;
+  if (first.id || second.id) {
+    return Boolean(first.id && second.id && first.id === second.id);
+  }
+  return first.startTime === second.startTime;
+};
+
+/**
+ * Persist the completed session to both recovery slots.
+ * At least one durable copy is enough for the completion screen to recover it.
+ * @param {Workout} workout
+ * @returns {boolean} whether either record was persisted
+ */
+export const persistCompletedWorkout = function (workout) {
+  const completedPersisted = setStorageItem(
+    STORAGE_KEYS.COMPLETED_WORKOUT,
+    workout,
+  );
+  const activePersisted = setStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT, workout);
+  return completedPersisted || activePersisted;
 };
 
 /**
@@ -520,14 +857,36 @@ export const getCurrentWorkout = function () {
  *
  * v0 -> v1: history entries moved from display-only strings to numeric
  * distance/duration plus a real start timestamp.
+ * v1 -> v2: copy the legacy two-key streak into one atomic state record.
  */
 export const migrateStoredSchema = function () {
-  const stored = Number(getStorageItem(STORAGE_KEYS.SCHEMA_VERSION));
+  const rawStored = Number(getStorageItem(STORAGE_KEYS.SCHEMA_VERSION));
+  const stored =
+    Number.isFinite(rawStored) && rawStored > 0 ? Math.floor(rawStored) : 0;
   if (Number.isFinite(stored) && stored >= SCHEMA_VERSION) return false;
 
-  const history = getStorageItem(STORAGE_KEYS.HISTORY);
-  if (history.length > 0) {
-    setStorageItem(STORAGE_KEYS.HISTORY, history);
+  if (stored < 1) {
+    const history = getStorageItem(STORAGE_KEYS.HISTORY);
+    if (history.length > 0) {
+      setStorageItem(STORAGE_KEYS.HISTORY, history);
+    }
+  }
+  if (stored < 2) {
+    const existingStreakState = getStorageItem(STORAGE_KEYS.STREAK_STATE);
+    if (existingStreakState === null) {
+      const streak = Number(getStorageItem(STORAGE_KEYS.STREAK));
+      const lastActivity = getStorageItem(STORAGE_KEYS.STREAK_LAST_ACTIVITY);
+      if (
+        Number.isFinite(streak) &&
+        streak >= 0 &&
+        typeof lastActivity === "string"
+      ) {
+        setStorageItem(STORAGE_KEYS.STREAK_STATE, {
+          count: Math.floor(streak),
+          lastActivity,
+        });
+      }
+    }
   }
   setStorageItem(STORAGE_KEYS.SCHEMA_VERSION, SCHEMA_VERSION);
   return true;

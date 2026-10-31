@@ -21,7 +21,11 @@ let isHistoryInitialized = false;
  * @returns {string}
  */
 const resolveDateLabel = function (item) {
-  if (Number.isFinite(item.startedAtMs) && item.startedAtMs > 0) {
+  if (
+    typeof item.startedAtMs === "number" &&
+    Number.isFinite(item.startedAtMs) &&
+    item.startedAtMs > 0
+  ) {
     const formatted = formatHistoryDate(item.startedAtMs);
     if (formatted) return formatted;
   }
@@ -40,6 +44,7 @@ export const initHistoryScreen = function () {
   if (!historyContainer) return;
 
   const storedHistory = getStorageItem(STORAGE_KEYS.HISTORY);
+  /** @type {{ title: string, sport: string, startedAtMs: number|null, dateLabel: string, distanceKm: number|null, elapsedSeconds: number|null, efficiencyValue: string, efficiencyLabel: string }[]} */
   const entries = Array.isArray(storedHistory) ? storedHistory : [];
 
   historyContainer.replaceChildren();
@@ -72,20 +77,37 @@ export const initHistoryScreen = function () {
         <div><div class="history-metric-val efficiency-val"></div><div class="history-metric-unit efficiency-label"></div></div>
       </div>`;
 
-    entry.querySelector(".history-title").textContent = item.title || "Workout";
-    entry.querySelector(".history-date").textContent = resolveDateLabel(item);
-    entry.querySelector(".distance").textContent =
-      Number.isFinite(item.distanceKm) && item.distanceKm >= 0
+    /** @param {string} selector @param {string} text */
+    const setText = function (selector, text) {
+      const element = entry.querySelector(selector);
+      if (element) element.textContent = text;
+    };
+    setText(".history-title", item.title || "Workout");
+    setText(".history-date", resolveDateLabel(item));
+    setText(
+      ".distance",
+      typeof item.distanceKm === "number" &&
+        Number.isFinite(item.distanceKm) &&
+        item.distanceKm >= 0
         ? formatDistance(item.distanceKm)
-        : "0.0 km";
-    entry.querySelector(".duration").textContent =
-      Number.isFinite(item.elapsedSeconds) && item.elapsedSeconds > 0
+        : "0.0 km",
+    );
+    setText(
+      ".duration",
+      typeof item.elapsedSeconds === "number" &&
+        Number.isFinite(item.elapsedSeconds) &&
+        item.elapsedSeconds > 0
         ? formatTime(item.elapsedSeconds)
-        : "00:00";
-    entry.querySelector(".efficiency-val").textContent =
-      item.efficiencyValue || (isRide ? "0.0" : "--:--");
-    entry.querySelector(".efficiency-label").textContent =
-      item.efficiencyLabel || (isRide ? "Speed (km/h)" : "Pace (/km)");
+        : "00:00",
+    );
+    setText(
+      ".efficiency-val",
+      item.efficiencyValue || (isRide ? "0.0" : "--:--"),
+    );
+    setText(
+      ".efficiency-label",
+      item.efficiencyLabel || (isRide ? "Speed (km/h)" : "Pace (/km)"),
+    );
 
     fragment.appendChild(entry);
   });

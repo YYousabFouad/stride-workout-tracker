@@ -18,8 +18,13 @@ export const initAccountModal = function () {
   const openBtn = document.getElementById("btn-open-account");
   if (!modal) return;
 
-  const usernameInput = document.getElementById("input-username");
-  const emailInput = document.getElementById("input-email");
+  const usernameInput = /** @type {HTMLInputElement|null} */ (
+    document.getElementById("input-username")
+  );
+  const emailInput = /** @type {HTMLInputElement|null} */ (
+    document.getElementById("input-email")
+  );
+  const storageError = modal.querySelector("#account-storage-error");
   const titleEl = modal.querySelector(".modal-title");
   const subtitleEl = modal.querySelector(".modal-subtitle");
 
@@ -46,6 +51,7 @@ export const initAccountModal = function () {
       document.dispatchEvent(new CustomEvent("stride:account-cancelled"));
     },
   });
+  if (!dialog) return;
 
   const closeModal = function (accountCreated = false) {
     dialog.close();
@@ -85,7 +91,8 @@ export const initAccountModal = function () {
   document.addEventListener("stride:open-account", openModal);
 
   // Close triggers: close button and Cancel button
-  modal.querySelectorAll(".modal-close-btn, .btn-outline").forEach((btn) => {
+  modal.querySelectorAll("button").forEach((btn) => {
+    if (!btn.matches(".modal-close-btn, .btn-outline")) return;
     btn.addEventListener("click", () => closeModal(false));
   });
 
@@ -96,9 +103,11 @@ export const initAccountModal = function () {
 
   // Account creation handling
   const form = document.getElementById("form-create-account");
-  const submitBtn = modal.querySelector(".modal-footer .btn-primary");
+  const submitBtn = /** @type {HTMLButtonElement|null} */ (
+    modal.querySelector(".modal-footer .btn-primary")
+  );
 
-  const handleAccountCreate = async function () {
+  const handleAccountCreate = function () {
     const rawUsername = usernameInput ? usernameInput.value : "";
     const username = sanitizeString(rawUsername, 50) || "Athlete";
 
@@ -109,16 +118,24 @@ export const initAccountModal = function () {
       return;
     }
     const email = rawEmail;
-    const existingUser = getStorageItem(STORAGE_KEYS.USER) || {};
+    const existingUser = getStorageItem(STORAGE_KEYS.USER);
 
     const userProfile = {
       username,
       email,
-      createdAt: existingUser.createdAt || Date.now(),
+      createdAt: existingUser?.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
 
-    setStorageItem(STORAGE_KEYS.USER, userProfile);
+    if (!setStorageItem(STORAGE_KEYS.USER, userProfile)) {
+      if (storageError) {
+        storageError.textContent =
+          "Browser storage couldn't save your profile. Enable site storage and try again.";
+        storageError.classList.remove("u-hidden");
+      }
+      return;
+    }
+    if (storageError) storageError.classList.add("u-hidden");
     syncAccountNavButton();
     closeModal(true);
     document.dispatchEvent(

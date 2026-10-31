@@ -42,6 +42,7 @@ beforeEach(() => {
   // is what makes every test start from an untouched profile.
   setStorageItem(STORAGE_KEYS.STREAK, null);
   setStorageItem(STORAGE_KEYS.STREAK_LAST_ACTIVITY, null);
+  setStorageItem(STORAGE_KEYS.STREAK_STATE, null);
 });
 
 afterEach(() => {
@@ -99,6 +100,12 @@ test("keeps an unbroken chain when the last activity was yesterday", async () =>
   assert.equal(getStreakCount(), 6);
 });
 
+test("does not treat a future activity date as an earned streak", async () => {
+  seedStreak(6, dayKeyFromToday(1));
+  const { getStreakCount } = await loadStreakModule();
+  assert.equal(getStreakCount(), 0);
+});
+
 test("decays to 0 when the last activity is stale", async () => {
   seedStreak(6, dayKeyFromToday(-3));
   const { getStreakCount } = await loadStreakModule();
@@ -117,10 +124,15 @@ test("treats a non-numeric stored streak as 0", async () => {
   assert.equal(getStreakCount(), 0);
 });
 
-test("daysBetweenDayKeys rejects malformed keys and measures real spans", async () => {
+test("daysBetweenDayKeys rejects invalid calendar dates and measures real spans", async () => {
   const { daysBetweenDayKeys, isDayKey } = await loadStreakModule();
 
   assert.equal(isDayKey("2026-10-25"), true);
+  assert.equal(isDayKey("2024-02-29"), true);
+  assert.equal(isDayKey("2023-02-29"), false);
+  assert.equal(isDayKey("2026-02-30"), false);
+  assert.equal(isDayKey("2026-13-01"), false);
+  assert.equal(isDayKey("0000-01-01"), false);
   assert.equal(isDayKey("2026-1-5"), false);
   assert.equal(isDayKey("25-10-2026"), false);
 
@@ -128,6 +140,8 @@ test("daysBetweenDayKeys rejects malformed keys and measures real spans", async 
   assert.equal(daysBetweenDayKeys("2026-10-25", "2026-10-26"), 1);
   assert.equal(daysBetweenDayKeys("2026-10-25", "2026-10-30"), 5);
   assert.equal(daysBetweenDayKeys("2026-10-30", "2026-10-25"), -5);
+  assert.equal(daysBetweenDayKeys("0099-12-31", "0100-01-01"), 1);
+  assert.equal(daysBetweenDayKeys("2026-02-30", "2026-03-02"), null);
   assert.equal(daysBetweenDayKeys("nope", "2026-10-25"), null);
   assert.equal(daysBetweenDayKeys("2026-10-25", "nope"), null);
 });
@@ -147,6 +161,140 @@ test("saving twice on the same day does not double count", async () => {
   assert.equal(incrementStreak(), 1);
   assert.equal(incrementStreak(), 1);
   assert.equal(getStorageItem(STORAGE_KEYS.STREAK), 1);
+});
+
+test("retrying an older workout does not credit it to a newer streak day", async () => {
+  seedStreak(5, dayKeyFromToday(-1));
+  const olderActivity = new Date();
+  olderActivity.setDate(olderActivity.getDate() - 2);
+  const { recordWorkoutStreak } = await loadStreakModule();
+
+  const retry = recordWorkoutStreak(olderActivity.getTime());
+
+  assert.equal(retry.count, 5);
+  assert.equal(retry.persisted, true);
+  assert.equal(getStorageItem(STORAGE_KEYS.STREAK), 5);
+  assert.equal(
+    getStorageItem(STORAGE_KEYS.STREAK_LAST_ACTIVITY),
+    dayKeyFromToday(-1),
+  );
+});
+
+test("failed streak persistence does not update legacy keys and can be retried", async () => {
+  const persisted = new Map([
+    [STORAGE_KEYS.STREAK, JSON.stringify(5)],
+    [STORAGE_KEYS.STREAK_LAST_ACTIVITY, JSON.stringify(dayKeyFromToday(-1))],
+  ]);
+  let rejectAtomicWrite = true;
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) => persisted.get(key) ?? null,
+      setItem: (key, value) => {
+        if (key === STORAGE_KEYS.STREAK_STATE && rejectAtomicWrite) {
+          throw new Error("Storage quota exceeded");
+        }
+        persisted.set(key, String(value));
+      },
+      removeItem: (key) => persisted.delete(key),
+    },
+  });
+
+  const { recordWorkoutStreak } = await loadStreakModule();
+  const firstAttempt = recordWorkoutStreak();
+  assert.deepEqual(firstAttempt, { count: 6, persisted: false });
+  assert.equal(persisted.has(STORAGE_KEYS.STREAK_STATE), false);
+  assert.equal(persisted.get(STORAGE_KEYS.STREAK), JSON.stringify(5));
+  assert.equal(
+    persisted.get(STORAGE_KEYS.STREAK_LAST_ACTIVITY),
+    JSON.stringify(dayKeyFromToday(-1)),
+  );
+
+  rejectAtomicWrite = false;
+  const retry = recordWorkoutStreak();
+  assert.deepEqual(retry, { count: 6, persisted: true });
+  assert.deepEqual(JSON.parse(persisted.get(STORAGE_KEYS.STREAK_STATE)), {
+    count: 6,
+    lastActivity: dayKeyFromToday(0),
+  });
+});
+
+test("projection matches increment: same-day second workout shows the earned streak", async () => {
+  // Regression: the Complete card used to advertise streak + 1 even when
+  // saving could not increment it again (last activity already today).
+  const { getStreakCount, projectStreakAfterSave } = await loadStreakModule();
+  seedStreak(5, dayKeyFromToday(0));
+  const earned = getStreakCount();
+  const projected = projectStreakAfterSave(
+    earned,
+    getStorageItem(STORAGE_KEYS.STREAK_LAST_ACTIVITY),
+    dayKeyFromToday(0),
+  );
+  const { incrementStreak } = await loadStreakModule();
+  const actual = incrementStreak();
+  assert.equal(projected, actual, "projection must equal the real increment");
+  assert.equal(projected, 5);
+});
+
+test("projection adds one when today has no activity yet", async () => {
+  seedStreak(5, dayKeyFromToday(-1));
+  const { getStreakCount, projectStreakAfterSave } = await loadStreakModule();
+  const projected = projectStreakAfterSave(
+    getStreakCount(),
+    getStorageItem(STORAGE_KEYS.STREAK_LAST_ACTIVITY),
+    dayKeyFromToday(0),
+  );
+  assert.equal(projected, 6);
+});
+
+test("projection restarts a broken chain at 1", async () => {
+  seedStreak(5, dayKeyFromToday(-4));
+  const { getStreakCount, projectStreakAfterSave } = await loadStreakModule();
+  const projected = projectStreakAfterSave(
+    getStreakCount(),
+    getStorageItem(STORAGE_KEYS.STREAK_LAST_ACTIVITY),
+    dayKeyFromToday(0),
+  );
+  assert.equal(projected, 1);
+});
+
+test("projection does not credit an older workout to today's streak", async () => {
+  const { projectStreakAfterSave } = await loadStreakModule();
+  const currentStreak = 5;
+  const projected = projectStreakAfterSave(
+    currentStreak,
+    dayKeyFromToday(0),
+    dayKeyFromToday(0),
+    dayKeyFromToday(-1),
+  );
+
+  assert.equal(projected, currentStreak);
+});
+
+test("projection preserves the prior count for a workout completed yesterday", async () => {
+  const { projectStreakAfterSave } = await loadStreakModule();
+  const projected = projectStreakAfterSave(
+    0,
+    dayKeyFromToday(-2),
+    dayKeyFromToday(0),
+    dayKeyFromToday(-1),
+    5,
+  );
+
+  assert.equal(projected, 6);
+});
+
+test("projection clamps a future completion date to today", async () => {
+  const { projectStreakAfterSave } = await loadStreakModule();
+  const projected = projectStreakAfterSave(
+    5,
+    dayKeyFromToday(-1),
+    dayKeyFromToday(0),
+    dayKeyFromToday(1),
+    5,
+  );
+
+  assert.equal(projected, 6);
 });
 
 test("extends an unbroken chain from the previous day", async () => {

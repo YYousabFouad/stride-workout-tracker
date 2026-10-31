@@ -92,7 +92,8 @@ All workout state is persisted client-side in the browser:
 | `stride_history`              | Completed sessions, schema v1 (max 50)               | `[ { id, title, sport, startedAtMs, dateLabel, distanceKm, elapsedSeconds, efficiencyValue, efficiencyLabel }, ... ]`   |
 | `stride_streak`               | Earned streak days (derived on read)                 | `number` (e.g. `6`)                                                                                                     |
 | `stride_streak_last_activity` | Local day key of the last recorded workout           | `"YYYY-MM-DD"`                                                                                                          |
-| `stride_schema_version`       | Persisted data shape version                         | `number` (currently `1`)                                                                                                |
+| `stride_streak_state`         | Atomic primary streak record                         | `{ count, lastActivity }`                                                                                               |
+| `stride_schema_version`       | Persisted data shape version                         | `number` (currently `2`)                                                                                                |
 | `stride_user`                 | Local athlete profile (not an authenticated account) | `{ username, email, createdAt, updatedAt }`                                                                             |
 | `stride_last_location`        | Last known athlete GPS fix                           | `[ latitude, longitude ]`                                                                                               |
 
@@ -138,11 +139,12 @@ Right-click `index.html` and select **"Open with Live Server"**.
 | `npm run dev`          | Serve the app at `http://127.0.0.1:4173` |
 | `npm test`             | Run the Node test suite                  |
 | `npm run lint`         | Lint JavaScript with ESLint              |
+| `npm run typecheck`    | Check application JavaScript types       |
 | `npm run format`       | Format the repository with Prettier      |
 | `npm run format:check` | Verify formatting without writing        |
 
-Every push to `main` and every pull request runs the same lint, format, and test
-steps through `.github/workflows/ci.yml`.
+Every push to `main` and every pull request runs lint, type checking, formatting,
+and tests through `.github/workflows/ci.yml`.
 
 ---
 
@@ -157,7 +159,7 @@ steps through `.github/workflows/ci.yml`.
 
 ## 🔒 Security Engineering & Privacy Controls
 
-- **Content Security Policy (CSP)**: Each HTML shell limits resource origins and blocks plugins and base URL changes. The current policy trusts scripts from unpkg and allows inline styles for Leaflet; deployments should also send CSP and other security headers as HTTP response headers.
+- **Content Security Policy (CSP)**: Each HTML shell limits resource origins and blocks inline scripts and styles, plugins, and base URL changes. The dev server adds framing protections with HTTP headers; production hosts must send CSP and other security headers as response headers too. Leaflet is served locally.
 - **No Client-Side Credential Collection**: The app is offline-first and has no authentication service. The local athlete profile collects no password; a browser-side hash would not provide authentication or protect against localStorage access.
 - **Zero Trust Input Validation**: Sports and goal parameters are whitelisted against immutable enums, while text inputs are sanitized to strip control characters and bounded in length (CWE-20).
 - **Storage Quota & DoS Hardening**: Bounded workout history size (max 50 sessions) and decimation of GPS polyline coordinates prevent client-side `QuotaExceededError` and memory exhaustion (CWE-400).

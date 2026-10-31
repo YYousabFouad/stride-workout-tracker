@@ -12,44 +12,90 @@ import {
   getStorageItem,
   setStorageItem,
 } from "../core/storage.js";
+import {
+  MAX_ACCEPTABLE_ACCURACY_M,
+  MIN_STEP_DISTANCE_KM,
+  SMOOTHING_WEIGHT,
+  acceptGpsStep,
+} from "../core/route-math.js";
 
+/** @typedef {import("./map-contracts.js").Coordinate} Coordinate */
+/** @typedef {import("./map-contracts.js").RouteUpdate} RouteUpdate */
+/** @typedef {import("./map-contracts.js").RouteTrackingOptions} RouteTrackingOptions */
+/** @type {typeof import("leaflet")} */
+const L = globalThis.L;
+
+/** @type {import("leaflet").Map|null} */
 let map = null;
+/** @type {number|null} */
 let watchId = null;
+/** @type {import("leaflet").Polyline|null} */
 let routePolyline = null;
+/** @type {import("leaflet").Polyline|null} */
 let routeCasingPolyline = null;
+/** @type {import("leaflet").CircleMarker|null} */
 let originMarker = null;
+/** @type {import("leaflet").CircleMarker|null} */
 let currentMarker = null;
+/** @type {Coordinate[]} */
 let routeCoords = [];
 let totalTrackedDistanceKm = 0;
 let isTrackingStopped = false;
+/** @type {((update: RouteUpdate) => void)|null} */
 let onRouteUpdateCallback = null;
+/** @type {import("leaflet").Marker|null} */
 let clickArrowMarker = null;
+/** @type {import("leaflet").Circle|null} */
 let locationAccuracyCircle = null;
+/** @type {import("leaflet").Polyline|null} */
 let navGuidePolyline = null;
+/** @type {import("leaflet").Polyline|null} */
 let navGuideCasingPolyline = null;
 let isNavigatingToArrow = false;
+/** @type {AbortController|null} */
 let activeOsrmAbortController = null;
+/** @type {ReturnType<typeof setTimeout>|null} */
 let navToastTimeout = null;
 let lastRecordedGpsTime = 0;
+/** @type {Coordinate|null} */
 let lastRecordedGpsCoord = null;
+/** @type {Coordinate|null} */
+let lastAcceptedRawCoord = null;
+let lastLocationPersistedAt = 0;
 let currentGpsSpeedKmh = 0;
+/** @type {ReturnType<typeof setTimeout>|null} */
 let stationaryWatchdogTimer = null;
 
 const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const OSM_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
-const DEFAULT_FALLBACK_COORDS = [40.7128, -74.006]; // Sensible default if no GPS or stored position yet
-const MIN_STEP_DISTANCE_KM = 0.007; // 7m deadband threshold (filters micro-jitter & stationary drift)
-const MAX_ACCEPTABLE_ACCURACY_M = 35; // Discard noisy satellite multipath spikes
-const SMOOTHING_WEIGHT = 0.45; // EMA filter towards motion vector (ruler-straight segment smoothing)
+/** @type {Coordinate} Sensible fallback if no GPS or stored position exists. */
+const DEFAULT_FALLBACK_COORDS = [40.7128, -74.006];
+// `stride_last_location` is synchronous localStorage; writing it on every GPS
+// fix (~1 Hz) janks mobile UI threads. Persist at most every 5 s.
+const LAST_LOCATION_PERSIST_INTERVAL_MS = 5000;
 
+// Direction guidance ETA: conservative runner pace applied to geometric
+// distances. The OSRM demo endpoint only serves a car profile ("foot" and
+// "driving" return identical routes), so its durations are unusable for
+// pedestrian guidance and are never shown to the athlete.
+const NAVIGATION_ESTIMATE_SPEED_KMH = 10;
+
+/** @param {...string} ids @returns {HTMLElement[]} */
+const getPresentElements = function (...ids) {
+  return ids
+    .map((id) => document.getElementById(id))
+    .filter((element) => element !== null);
+};
+
+/** @returns {Coordinate} */
 const getStoredLocation = function () {
   if (routeCoords.length > 0) {
     return routeCoords[routeCoords.length - 1];
   }
   const lastLoc = getStorageItem(STORAGE_KEYS.LAST_LOCATION);
   if (Array.isArray(lastLoc) && lastLoc.length === 2) {
-    return lastLoc;
+    return /** @type {Coordinate} */ (lastLoc);
   }
   const activeWorkout = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
   if (
@@ -61,6 +107,7 @@ const getStoredLocation = function () {
   return DEFAULT_FALLBACK_COORDS;
 };
 
+/** @param {boolean} isActive @param {string} message */
 const updateGpsStatusBadge = function (isActive, message) {
   const badge = document.getElementById("map-gps-badge");
   const text = document.getElementById("map-gps-status");
@@ -118,6 +165,11 @@ export const createArrowIcon = function () {
   });
 };
 
+/**
+ * @param {import("leaflet").Map|null} targetMap
+ * @param {Coordinate|import("leaflet").LatLng|null} latlng
+ * @returns {import("leaflet").Marker|null}
+ */
 export const setOrMoveArrowMarker = function (targetMap, latlng) {
   if (!targetMap || !latlng || typeof L === "undefined") return null;
 
@@ -148,7 +200,9 @@ export const setOrMoveArrowMarker = function (targetMap, latlng) {
     // Replay drop animation so it visibly drops/hops at the new position
     const el = clickArrowMarker.getElement();
     if (el) {
-      const pin = el.querySelector(".map-arrow-marker-pin");
+      const pin = /** @type {HTMLElement|null} */ (
+        el.querySelector(".map-arrow-marker-pin")
+      );
       if (pin) {
         pin.style.animation = "none";
         requestAnimationFrame(() => {
@@ -159,10 +213,10 @@ export const setOrMoveArrowMarker = function (targetMap, latlng) {
   }
 
   // Reveal the Navigate button in the map controls
-  const navBtns = [
-    document.getElementById("btn-navigate-arrow"),
-    document.getElementById("btn-complete-navigate"),
-  ].filter(Boolean);
+  const navBtns = getPresentElements(
+    "btn-navigate-arrow",
+    "btn-complete-navigate",
+  );
   navBtns.forEach((btn) => {
     btn.style.display = "flex";
   });
@@ -186,10 +240,10 @@ export const clearClickArrowMarker = function (targetMap = map) {
   clickArrowMarker = null;
 
   // Hide navigate buttons when arrow is cleared
-  const navBtns = [
-    document.getElementById("btn-navigate-arrow"),
-    document.getElementById("btn-complete-navigate"),
-  ].filter(Boolean);
+  const navBtns = getPresentElements(
+    "btn-navigate-arrow",
+    "btn-complete-navigate",
+  );
   navBtns.forEach((btn) => {
     btn.style.display = "none";
   });
@@ -213,7 +267,9 @@ export const calculateBearing = function (coordA, coordB) {
   ) {
     return 0;
   }
+  /** @param {number} deg @returns {number} */
   const toRad = (deg) => (deg * Math.PI) / 180;
+  /** @param {number} rad @returns {number} */
   const toDeg = (rad) => (rad * 180) / Math.PI;
 
   const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
@@ -300,34 +356,73 @@ export const fetchOsrmRoute = async function (
       url,
       controller ? { signal: controller.signal } : {},
     );
-    if (timeoutId) clearTimeout(timeoutId);
-    if (externalSignal) {
-      externalSignal.removeEventListener("abort", handleExternalAbort);
-    }
 
     if (!res.ok) throw new Error(`OSRM status ${res.status}`);
-    const data = await res.json();
+    // Keep the timeout armed through body parsing: a response that stalls on
+    // the body (headers already delivered) must not hang navigation forever.
+    const data = /** @type {unknown} */ (await res.json());
+    /** @param {unknown} value @returns {value is Record<string, unknown>} */
+    const isRecord = (value) =>
+      typeof value === "object" && value !== null && !Array.isArray(value);
 
     if (
-      data.code === "Ok" &&
-      Array.isArray(data.routes) &&
-      data.routes.length > 0
+      !isRecord(data) ||
+      data.code !== "Ok" ||
+      !Array.isArray(data.routes) ||
+      data.routes.length === 0
     ) {
-      const best = data.routes[0];
-      const coords = best.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
-      return {
-        coords,
-        distanceMeters: best.distance,
-        durationSec: best.duration,
-      };
+      throw new Error("No route found in response");
     }
-    throw new Error("No route found in response");
-  } catch (err) {
+
+    const best = data.routes[0];
+    if (
+      !isRecord(best) ||
+      !isRecord(best.geometry) ||
+      !Array.isArray(best.geometry.coordinates) ||
+      typeof best.distance !== "number" ||
+      !Number.isFinite(best.distance) ||
+      best.distance < 0 ||
+      typeof best.duration !== "number" ||
+      !Number.isFinite(best.duration) ||
+      best.duration < 0
+    ) {
+      throw new Error("Invalid route data in response");
+    }
+
+    const coords = best.geometry.coordinates.map(
+      (/** @type {unknown} */ coordinate) => {
+        if (
+          !Array.isArray(coordinate) ||
+          coordinate.length < 2 ||
+          typeof coordinate[0] !== "number" ||
+          !Number.isFinite(coordinate[0]) ||
+          coordinate[0] < -180 ||
+          coordinate[0] > 180 ||
+          typeof coordinate[1] !== "number" ||
+          !Number.isFinite(coordinate[1]) ||
+          coordinate[1] < -90 ||
+          coordinate[1] > 90
+        ) {
+          throw new Error("Invalid route coordinate in response");
+        }
+        return /** @type {Coordinate} */ ([coordinate[1], coordinate[0]]);
+      },
+    );
+
+    if (coords.length === 0) {
+      throw new Error("Route has no coordinates");
+    }
+
+    return {
+      coords,
+      distanceMeters: best.distance,
+      durationSec: best.duration,
+    };
+  } finally {
     if (timeoutId) clearTimeout(timeoutId);
     if (externalSignal) {
       externalSignal.removeEventListener("abort", handleExternalAbort);
     }
-    throw err;
   }
 };
 
@@ -335,11 +430,9 @@ export const isNavigating = function () {
   return isNavigatingToArrow;
 };
 
+/** @param {string} title @param {string} subtitle */
 export const showNavToast = function (title, subtitle) {
-  const toasts = [
-    document.getElementById("map-nav-toast"),
-    document.getElementById("complete-nav-toast"),
-  ].filter(Boolean);
+  const toasts = getPresentElements("map-nav-toast", "complete-nav-toast");
 
   if (navToastTimeout) {
     clearTimeout(navToastTimeout);
@@ -392,28 +485,25 @@ export const clearNavigation = function (targetMap = map) {
   navGuideCasingPolyline = null;
 
   // Restore HUD headers from navigating layout
-  const hudContainers = [
-    document.getElementById("map-hud-top"),
-    document.getElementById("complete-map-hud-top"),
-  ].filter(Boolean);
+  const hudContainers = getPresentElements(
+    "map-hud-top",
+    "complete-map-hud-top",
+  );
   hudContainers.forEach((h) => {
     h.classList.remove("is-navigating");
   });
 
   // Hide directions banners
-  const banners = [
-    document.getElementById("map-directions-banner"),
-    document.getElementById("complete-directions-banner"),
-  ].filter(Boolean);
+  const banners = getPresentElements(
+    "map-directions-banner",
+    "complete-directions-banner",
+  );
   banners.forEach((b) => {
     b.style.display = "none";
   });
 
   // Dismiss any momentary toast
-  const toasts = [
-    document.getElementById("map-nav-toast"),
-    document.getElementById("complete-nav-toast"),
-  ].filter(Boolean);
+  const toasts = getPresentElements("map-nav-toast", "complete-nav-toast");
   toasts.forEach((t) => {
     t.classList.remove("visible");
     t.style.display = "none";
@@ -424,10 +514,10 @@ export const clearNavigation = function (targetMap = map) {
   }
 
   // Reset navigate button states
-  const navBtns = [
-    document.getElementById("btn-navigate-arrow"),
-    document.getElementById("btn-complete-navigate"),
-  ].filter(Boolean);
+  const navBtns = getPresentElements(
+    "btn-navigate-arrow",
+    "btn-complete-navigate",
+  );
   navBtns.forEach((btn) => {
     btn.classList.remove("active");
     btn.setAttribute("aria-pressed", "false");
@@ -437,16 +527,18 @@ export const clearNavigation = function (targetMap = map) {
 
 /**
  * Lead athlete from current position to the placed arrow marker with turn/direction guidance
- * @param {L.Map} targetMap
+ * @param {import("leaflet").Map|null} [targetMap]
  */
 export const navigateToArrow = async function (targetMap = map) {
   const activeMap = targetMap || map;
   if (!activeMap || !clickArrowMarker) return;
 
   const targetLatLng = clickArrowMarker.getLatLng();
+  /** @type {Coordinate} */
   const dest = [targetLatLng.lat, targetLatLng.lng];
 
   // Determine current athlete position
+  /** @type {Coordinate} */
   let start;
   if (currentMarker) {
     const cll = currentMarker.getLatLng();
@@ -469,19 +561,19 @@ export const navigateToArrow = async function (targetMap = map) {
     : null;
 
   // Mark HUD headers as active navigation so mobile screens dock cleanly at top without blocking road
-  const hudContainers = [
-    document.getElementById("map-hud-top"),
-    document.getElementById("complete-map-hud-top"),
-  ].filter(Boolean);
+  const hudContainers = getPresentElements(
+    "map-hud-top",
+    "complete-map-hud-top",
+  );
   hudContainers.forEach((h) => {
     h.classList.add("is-navigating");
   });
 
   // Update navigate button states to active
-  const navBtns = [
-    document.getElementById("btn-navigate-arrow"),
-    document.getElementById("btn-complete-navigate"),
-  ].filter(Boolean);
+  const navBtns = getPresentElements(
+    "btn-navigate-arrow",
+    "btn-complete-navigate",
+  );
   navBtns.forEach((btn) => {
     btn.classList.add("active");
     btn.setAttribute("aria-pressed", "true");
@@ -494,19 +586,25 @@ export const navigateToArrow = async function (targetMap = map) {
   const compass = getCompassDirection(bearing);
   const distStr =
     distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`;
-  const estMins = Math.max(1, Math.round((distKm / 11) * 60));
+  const estMins = Math.max(
+    1,
+    Math.round((distKm / NAVIGATION_ESTIMATE_SPEED_KMH) * 60),
+  );
 
+  /** @param {string} title @param {string} meta @param {number} bearingDeg */
   const updateBannerUI = (title, meta, bearingDeg) => {
-    const banners = [
-      document.getElementById("map-directions-banner"),
-      document.getElementById("complete-directions-banner"),
-    ].filter(Boolean);
+    const banners = getPresentElements(
+      "map-directions-banner",
+      "complete-directions-banner",
+    );
 
     banners.forEach((banner) => {
       banner.style.display = "flex";
       const titleEl = banner.querySelector(".nav-direction-title");
       const metaEl = banner.querySelector(".nav-direction-meta");
-      const arrowEl = banner.querySelector(".nav-bearing-icon");
+      const arrowEl = /** @type {HTMLElement|null} */ (
+        banner.querySelector(".nav-bearing-icon")
+      );
 
       if (titleEl) titleEl.textContent = title;
       if (metaEl) metaEl.textContent = meta;
@@ -516,6 +614,7 @@ export const navigateToArrow = async function (targetMap = map) {
     });
   };
 
+  /** @param {Coordinate[]} coords */
   const renderGuidePolyline = (coords) => {
     if (!isNavigatingToArrow || !activeMap) return;
 
@@ -572,10 +671,7 @@ export const navigateToArrow = async function (targetMap = map) {
     `~${estMins} min · Calculating path...`,
     bearing,
   );
-  showNavToast(
-    "Navigating to Destination",
-    `Calculating walking route · ${distStr}`,
-  );
+  showNavToast("Navigating to Destination", `Tracking direction · ${distStr}`);
 
   // 2. Fetch precision street routing from OSRM
   try {
@@ -587,15 +683,21 @@ export const navigateToArrow = async function (targetMap = map) {
       route.distanceMeters < 1000
         ? `${Math.round(route.distanceMeters)} m`
         : `${(route.distanceMeters / 1000).toFixed(1)} km`;
-    const roadMins = Math.max(1, Math.round(route.durationSec / 60));
+    // ETA comes from our pace, not OSRM: the demo server's only profile is driving.
+    const roadMins = Math.max(
+      1,
+      Math.round(
+        (route.distanceMeters / 1000 / NAVIGATION_ESTIMATE_SPEED_KMH) * 60,
+      ),
+    );
     updateBannerUI(
       `Head ${compass} · ${roadDistStr}`,
-      `~${roadMins} min · Walking route`,
+      `~${roadMins} min · Estimated by road`,
       bearing,
     );
     showNavToast(
       "Navigating to Destination",
-      `${roadDistStr} · ~${roadMins} min walking route`,
+      `${roadDistStr} · ~${roadMins} min by road`,
     );
   } catch {
     if (currentSignal && currentSignal.aborted) return;
@@ -604,19 +706,23 @@ export const navigateToArrow = async function (targetMap = map) {
     renderGuidePolyline([start, dest]);
     updateBannerUI(
       `Head ${compass} · ${distStr}`,
-      `~${estMins} min · Direct guideline`,
+      `~${estMins} min · Direct-line estimate`,
       bearing,
     );
-    showNavToast("Navigating to Destination", `Direct guideline · ${distStr}`);
+    showNavToast("Navigating to Destination", `Direct line · ${distStr}`);
   }
 };
 
+/**
+ * @param {import("leaflet").Map|null} [targetMap]
+ * @param {{ onSuccess?: (coords: Coordinate, accuracy: number) => void, onError?: (error: Error|GeolocationPositionError) => void }} [options]
+ */
 export const showCurrentLocation = function (targetMap = map, options = {}) {
   const activeMap = targetMap || map;
-  const locateBtns = [
-    document.getElementById("btn-show-location"),
-    document.getElementById("btn-complete-locate"),
-  ].filter(Boolean);
+  const locateBtns = getPresentElements(
+    "btn-show-location",
+    "btn-complete-locate",
+  );
 
   locateBtns.forEach((btn) => {
     btn.classList.add("is-locating");
@@ -625,6 +731,7 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
 
   updateGpsStatusBadge(true, "Acquiring current GPS fix...");
 
+  /** @param {Coordinate} coords @param {number} [accuracy] */
   const handleSuccess = function (coords, accuracy = 0) {
     locateBtns.forEach((btn) => {
       btn.classList.remove("is-locating");
@@ -632,7 +739,10 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
     });
 
     const [lat, lng] = coords;
-    setStorageItem(STORAGE_KEYS.LAST_LOCATION, coords);
+    const activeWorkout = getStorageItem(STORAGE_KEYS.ACTIVE_WORKOUT);
+    if (activeWorkout?.status === "in_progress") {
+      setStorageItem(STORAGE_KEYS.LAST_LOCATION, coords);
+    }
     updateGpsStatusBadge(true, "Live GPS Active");
 
     if (activeMap) {
@@ -681,14 +791,16 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
     }
   };
 
+  /** @param {Error|GeolocationPositionError} err */
   const handleError = function (err) {
     locateBtns.forEach((btn) => {
       btn.classList.remove("is-locating");
       btn.removeAttribute("aria-busy");
     });
 
-    const isTimeout = err && err.code === 3;
-    const isDenied = err && err.code === 1;
+    const errorCode = "code" in err ? err.code : null;
+    const isTimeout = errorCode === 3;
+    const isDenied = errorCode === 1;
     const reasonMsg = isDenied
       ? "Location permission denied"
       : isTimeout
@@ -775,6 +887,7 @@ export const showCurrentLocation = function (targetMap = map, options = {}) {
   }
 };
 
+/** @param {HTMLElement} container @param {string} message */
 const renderFallbackState = function (container, message) {
   if (map) return;
   container.innerHTML = `
@@ -792,6 +905,7 @@ const renderFallbackState = function (container, message) {
   }
 };
 
+/** @param {Coordinate} initialCoords @returns {import("leaflet").Map|null} */
 const ensureMapInitialized = function (initialCoords) {
   const mapContainer = document.getElementById("map-viewport");
   if (!mapContainer || typeof L === "undefined") return null;
@@ -803,7 +917,7 @@ const ensureMapInitialized = function (initialCoords) {
           <span class="gps-indicator-dot"></span>
           <span id="map-gps-status">${routeCoords.length > 0 ? "Live GPS Active" : "Acquiring GPS signal..."}</span>
         </div>
-        <div class="nav-directions-banner" id="map-directions-banner" style="display: none;" role="status" title="Navigation instructions">
+        <div class="nav-directions-banner u-hidden" id="map-directions-banner" role="status" title="Navigation instructions">
           <div class="nav-directions-left">
             <div class="nav-bearing-icon" title="Compass heading">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -823,7 +937,7 @@ const ensureMapInitialized = function (initialCoords) {
           </button>
         </div>
       </div>
-      <div class="nav-moment-toast" id="map-nav-toast" style="display: none;" role="status">
+      <div class="nav-moment-toast u-hidden" id="map-nav-toast" role="status">
         <div class="nav-moment-toast-icon">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
@@ -837,11 +951,10 @@ const ensureMapInitialized = function (initialCoords) {
       <div class="map-controls-group">
         <button
           type="button"
-          class="map-control-btn nav-target-btn"
+          class="map-control-btn nav-target-btn u-hidden"
           id="btn-navigate-arrow"
           title="Get directions to arrow"
           aria-label="Get directions to arrow"
-          style="display: none;"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon">
             <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
@@ -960,7 +1073,12 @@ const ensureMapInitialized = function (initialCoords) {
     );
     if (directionsBannerEl) {
       directionsBannerEl.addEventListener("click", function (evt) {
-        if (evt.target.closest("#btn-cancel-directions")) return;
+        if (
+          evt.target instanceof Element &&
+          evt.target.closest("#btn-cancel-directions")
+        ) {
+          return;
+        }
         const titleEl = directionsBannerEl.querySelector(
           ".nav-direction-title",
         );
@@ -990,6 +1108,12 @@ const ensureMapInitialized = function (initialCoords) {
   return map;
 };
 
+/**
+ * @param {Coordinate} coords
+ * @param {number} [accuracy]
+ * @param {number|null} [nativeSpeed]
+ * @param {number} [timestamp]
+ */
 const recordCoordinate = function (
   coords,
   accuracy = 0,
@@ -998,8 +1122,13 @@ const recordCoordinate = function (
 ) {
   if (isTrackingStopped) return;
 
-  // Filter out wild satellite multipath spikes if accuracy is poor
-  if (accuracy > MAX_ACCEPTABLE_ACCURACY_M && routeCoords.length > 0) {
+  // Never anchor a route on a noisy first fix: a later accurate fix would
+  // otherwise count the uncertainty gap as if the athlete had moved.
+  if (
+    !Number.isFinite(accuracy) ||
+    accuracy < 0 ||
+    accuracy > MAX_ACCEPTABLE_ACCURACY_M
+  ) {
     return;
   }
 
@@ -1008,7 +1137,7 @@ const recordCoordinate = function (
 
   if (
     typeof nativeSpeed === "number" &&
-    !isNaN(nativeSpeed) &&
+    Number.isFinite(nativeSpeed) &&
     nativeSpeed >= 0
   ) {
     // W3C Geolocation API coords.speed is in m/s; convert to km/h
@@ -1050,11 +1179,16 @@ const recordCoordinate = function (
     }
   }, 3500);
 
-  setStorageItem(STORAGE_KEYS.LAST_LOCATION, coords);
+  // Persisted last-known-location feeds cold-start map previews; throttle it.
+  if (now - lastLocationPersistedAt >= LAST_LOCATION_PERSIST_INTERVAL_MS) {
+    lastLocationPersistedAt = now;
+    setStorageItem(STORAGE_KEYS.LAST_LOCATION, coords);
+  }
   updateGpsStatusBadge(true, "Live GPS Active");
 
   if (routeCoords.length === 0) {
     routeCoords.push(coords);
+    lastAcceptedRawCoord = coords;
     if (map) {
       if (!originMarker) {
         originMarker = L.circleMarker(coords, {
@@ -1080,26 +1214,26 @@ const recordCoordinate = function (
       }
       map.setView(coords, 16, { animate: true });
     } else {
-      ensureMapInitialized(coords);
+      const mapContainer = document.getElementById("map-viewport");
+      if (mapContainer && !mapContainer.hidden) {
+        ensureMapInitialized(coords);
+      }
     }
   } else {
-    const prev = routeCoords[routeCoords.length - 1];
-    const rawStepKm = calculateHaversineKm(prev, coords);
+    // Measurement spans raw-fix to raw-fix. Measuring against the display
+    // polyline (smoothed) would re-count smoothing lag as real distance and
+    // inflate totals.
+    const step = acceptGpsStep(
+      lastAcceptedRawCoord,
+      routeCoords[routeCoords.length - 1],
+      coords,
+      { minStepKm: MIN_STEP_DISTANCE_KM, smoothingWeight: SMOOTHING_WEIGHT },
+    );
 
-    if (rawStepKm >= MIN_STEP_DISTANCE_KM) {
-      // Linear vector smoothing (Exponential Moving Average) to eliminate lateral hand shake
-      const smoothLat = prev[0] + SMOOTHING_WEIGHT * (coords[0] - prev[0]);
-      const smoothLng = prev[1] + SMOOTHING_WEIGHT * (coords[1] - prev[1]);
-      const smoothedPoint = [
-        Number(smoothLat.toFixed(6)),
-        Number(smoothLng.toFixed(6)),
-      ];
-
-      // Keep display smoothing separate from measurement: measuring from the
-      // previous point to the smoothed point would count only SMOOTHING_WEIGHT
-      // of each accepted GPS step.
-      totalTrackedDistanceKm += rawStepKm;
-      routeCoords.push(smoothedPoint);
+    if (step) {
+      totalTrackedDistanceKm += step.stepKm;
+      routeCoords.push(step.displayPoint);
+      lastAcceptedRawCoord = coords;
 
       // Decimate when excessively large to keep Leaflet polyline rendering smooth
       routeCoords = decimateRoute(routeCoords, 600);
@@ -1134,6 +1268,7 @@ const recordCoordinate = function (
   // Live real-time directions update if athlete is navigating to the arrow
   if (isNavigatingToArrow && clickArrowMarker) {
     const targetLatLng = clickArrowMarker.getLatLng();
+    /** @type {Coordinate} */
     const dest = [targetLatLng.lat, targetLatLng.lng];
     const remainingKm = calculateHaversineKm(coords, dest);
 
@@ -1141,7 +1276,7 @@ const recordCoordinate = function (
     if (navGuidePolyline && typeof navGuidePolyline.getLatLngs === "function") {
       const currentPoints = navGuidePolyline.getLatLngs();
       if (Array.isArray(currentPoints) && currentPoints.length > 1) {
-        currentPoints[0] = L.latLng ? L.latLng(coords[0], coords[1]) : coords;
+        currentPoints[0] = L.latLng(coords[0], coords[1]);
         navGuidePolyline.setLatLngs(currentPoints);
         if (
           navGuideCasingPolyline &&
@@ -1153,10 +1288,10 @@ const recordCoordinate = function (
     }
 
     if (remainingKm <= 0.015) {
-      const banners = [
-        document.getElementById("map-directions-banner"),
-        document.getElementById("complete-directions-banner"),
-      ].filter(Boolean);
+      const banners = getPresentElements(
+        "map-directions-banner",
+        "complete-directions-banner",
+      );
       banners.forEach((banner) => {
         const titleEl = banner.querySelector(".nav-direction-title");
         const metaEl = banner.querySelector(".nav-direction-meta");
@@ -1175,16 +1310,21 @@ const recordCoordinate = function (
         remainingKm < 1
           ? `${Math.round(remainingKm * 1000)} m`
           : `${remainingKm.toFixed(1)} km`;
-      const estMins = Math.max(1, Math.round((remainingKm / 11) * 60));
+      const estMins = Math.max(
+        1,
+        Math.round((remainingKm / NAVIGATION_ESTIMATE_SPEED_KMH) * 60),
+      );
 
-      const banners = [
-        document.getElementById("map-directions-banner"),
-        document.getElementById("complete-directions-banner"),
-      ].filter(Boolean);
+      const banners = getPresentElements(
+        "map-directions-banner",
+        "complete-directions-banner",
+      );
       banners.forEach((banner) => {
         const titleEl = banner.querySelector(".nav-direction-title");
         const metaEl = banner.querySelector(".nav-direction-meta");
-        const arrowEl = banner.querySelector(".nav-bearing-icon");
+        const arrowEl = /** @type {HTMLElement|null} */ (
+          banner.querySelector(".nav-bearing-icon")
+        );
         if (titleEl) titleEl.textContent = `Head ${compass} · ${distStr}`;
         if (metaEl) metaEl.textContent = `~${estMins} min remaining`;
         if (arrowEl) arrowEl.style.transform = `rotate(${bearing}deg)`;
@@ -1193,6 +1333,7 @@ const recordCoordinate = function (
   }
 };
 
+/** @param {RouteTrackingOptions} [options] */
 export const startRouteTracking = function (options = {}) {
   const {
     initialCoords = [],
@@ -1210,15 +1351,32 @@ export const startRouteTracking = function (options = {}) {
   ) {
     routeCoords = [...initialCoords];
     totalTrackedDistanceKm = Number(initialDistanceKm) || 0;
+    // Resume measurement from the latest persisted point so the previous
+    // session's route is not re-measured from the origin.
+    lastAcceptedRawCoord = routeCoords[routeCoords.length - 1];
   }
 
-  if (!navigator.geolocation) return;
+  if (typeof navigator === "undefined" || !navigator.geolocation) {
+    const mapContainer = document.getElementById("map-viewport");
+    if (mapContainer) {
+      renderFallbackState(mapContainer, "Location tracking unavailable");
+    }
+    const targetHint = document.getElementById("live-target-hint");
+    if (targetHint) {
+      targetHint.textContent =
+        "Location tracking is unavailable in this browser or page context. " +
+        "Distance goals cannot progress without GPS.";
+    }
+    return;
+  }
 
   // Tier 1: Fast coarse location (< 300ms) to snap map immediately on mobile
   if (routeCoords.length === 0) {
     navigator.geolocation.getCurrentPosition(
       function (position) {
-        if (routeCoords.length === 0) {
+        // A coarse lookup can resolve after the workout has ended and its
+        // persisted last-known location has been removed.
+        if (!isTrackingStopped && routeCoords.length === 0) {
           const { latitude, longitude } = position.coords;
           setStorageItem(STORAGE_KEYS.LAST_LOCATION, [latitude, longitude]);
           if (map) {
@@ -1246,15 +1404,26 @@ export const startRouteTracking = function (options = {}) {
       const timestamp = position.timestamp || Date.now();
       recordCoordinate([latitude, longitude], accuracy, speed, timestamp);
     },
-    function () {
+    function (positionError) {
+      const isDenied = positionError && positionError.code === 1;
+      const message = isDenied
+        ? "Location denied"
+        : "GPS signal lost · Retrying...";
       const mapContainer = document.getElementById("map-viewport");
       if (!map && mapContainer) {
-        renderFallbackState(
-          mapContainer,
-          "Location access unavailable · Showing simulated grid",
-        );
+        renderFallbackState(mapContainer, "Location access unavailable");
       } else {
-        updateGpsStatusBadge(false, "GPS signal lost · Retrying...");
+        updateGpsStatusBadge(false, message);
+      }
+      // The GPS badge lives inside the (hidden) map viewport; surface the
+      // failure on the workout card so a distance goal can't fail silently.
+      if (isDenied) {
+        const targetHint = document.getElementById("live-target-hint");
+        if (targetHint) {
+          targetHint.textContent =
+            "Location denied — distance tracking unavailable. " +
+            "Enable location access for this site, then reload to resume tracking.";
+        }
       }
     },
     {
@@ -1265,7 +1434,7 @@ export const startRouteTracking = function (options = {}) {
   );
 };
 
-export const stopRouteTracking = function () {
+export const stopRouteTracking = function (reachedGoal = false) {
   isTrackingStopped = true;
   if (stationaryWatchdogTimer) {
     clearTimeout(stationaryWatchdogTimer);
@@ -1274,11 +1443,17 @@ export const stopRouteTracking = function () {
   currentGpsSpeedKmh = 0;
   lastRecordedGpsCoord = null;
   lastRecordedGpsTime = 0;
-  if (watchId !== null && navigator.geolocation) {
+  lastAcceptedRawCoord = null;
+  lastLocationPersistedAt = 0;
+  if (
+    watchId !== null &&
+    typeof navigator !== "undefined" &&
+    navigator.geolocation
+  ) {
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
   }
-  if (currentMarker) {
+  if (currentMarker && reachedGoal) {
     currentMarker.bindPopup("Goal Reached! 🎉").openPopup();
   }
 };
@@ -1337,7 +1512,8 @@ export const destroyMap = function () {
   }
   clearNavigation(map);
   stopRouteTracking();
-  if (map) {
+  const mapInstance = map;
+  if (mapInstance) {
     try {
       [
         originMarker,
@@ -1347,15 +1523,17 @@ export const destroyMap = function () {
         routePolyline,
         routeCasingPolyline,
       ].forEach((layer) => {
-        if (layer && typeof map.removeLayer === "function") {
+        if (layer && typeof mapInstance.removeLayer === "function") {
           try {
-            map.removeLayer(layer);
-          } catch {}
+            mapInstance.removeLayer(layer);
+          } catch (err) {
+            console.warn("Error removing map layer during teardown:", err);
+          }
         }
       });
-      map.remove();
+      mapInstance.remove();
     } catch (err) {
-      // Silently ignore teardown errors
+      console.warn("Error destroying route map:", err);
     }
     map = null;
   }
@@ -1367,6 +1545,7 @@ export const destroyMap = function () {
   locationAccuracyCircle = null;
   routeCoords = [];
   totalTrackedDistanceKm = 0;
+  lastAcceptedRawCoord = null;
+  lastLocationPersistedAt = 0;
   onRouteUpdateCallback = null;
-  isTrackingStopped = false;
 };
